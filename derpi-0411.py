@@ -5,6 +5,8 @@ import json
 import urllib
 import time
 
+from sympy import Q
+
 """
 This is mostly draft, temporary (BWAHAHA) code.
 DOCS:
@@ -13,6 +15,8 @@ https://docs.python-requests.org/en/latest/
 
 API:
 https://derpibooru.org/pages/api
+Also:
+https://derpibooru.org/pages/search_syntax
 
 Test image:
 2836500 (RD)
@@ -159,10 +163,66 @@ class derpi():
 
         return r_dict
 
-
-    def imageSearch(self, q="safe", sf="first_seen_at", sd="desc", 
+    def imageSearchTags(self, q="safe", sf="first_seen_at", sd="desc", 
         n_get=50, per_page=50,
         desired_tags=[], undesired_tags=[]):
+        """
+        Modified version of imageSearch() designed solely to get 
+        a select number of images that fit the given tag criteria
+
+        NOTE:
+        if there are OR tags, put them in the query
+        wait this whole function is sort of irrelevant because everything can be 
+        chucked into the search query.
+        What the HAAAAAY
+
+        (Untested.)
+        """
+        api_path = r'/api/v1/json/search/images'
+        q = urllib.parse.quote(q)
+
+        pg = 0
+        list_of_images = []
+
+        while len(list_of_images) <= n_get:
+            url = self.combineApiUrl(
+                api_path, 
+                q_params={
+                    "q":q,
+                    "filter_id":56027,
+                    "page":pg,
+                    "per_page":per_page,
+                    "sd":sd,
+                    "sf":sf
+                    }
+                )
+            
+            r_json = self.get(
+                url=url,
+                printJson=False
+            )
+
+            if len(r_json["images"]) == 0:
+                break
+
+            for image in r_json["images"]:
+                if len(list_of_images) > n_get:
+                    break
+
+                id = image["id"]
+                r = self.getImageInfo(id)
+                if not all(a in r["tags"] for a in desired_tags) or any(a in r["tags"] for a in undesired_tags):
+                    continue
+                else:
+                    list_of_images.append(id)
+
+            pg += 1
+
+        return list_of_images
+
+
+    def imageSearch(self, q="safe", sf="first_seen_at", sd="desc", 
+        n_get=50, per_page=50):
         """
         The Big one. Searches using the tags
         query is "q"
@@ -196,7 +256,7 @@ class derpi():
             url = self.combineApiUrl(
                 api_path, 
                 q_params={
-                    "q":urllib.parse.quote(q.replace(" ","")),
+                    "q":urllib.parse.quote(q),
                     "filter_id":56027,
                     "page":pg,
                     "per_page":per_page,
@@ -236,8 +296,9 @@ def main():
     derp = derpi()
 
     ### processing data for batch dl
-    s_query = "fs, pp, safe, score.gte:250, score.lte:350"
-    imgList = derp.imageSearch(q=s_query, sf="score", n_get=10)
+    s_query = "((!fs, pp) OR (!pp, fs)), solo, safe, score.gte:200, score.lte:1200, !animated" # this one is refined for two solo chars
+
+    imgList = derp.imageSearch(q=s_query, sf="score", n_get=20)
 
     desired_tags = ["fluttershy", "pinkie pie"] # note same tags with dissimilar strings
     # fuck I need a `too many characters in here` filter
@@ -255,6 +316,5 @@ def main():
 
     # derp.get(derp.combineApiUrl("/api/v1/json/filters/56027"), printJson=True)
 
-
 if __name__ == "__main__":
-    randomFun()
+    main()
