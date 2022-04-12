@@ -470,8 +470,37 @@ class derpi():
         return list_of_images
 
 ####
-default_queries = "solo, pony, safe, score.gte:200, score.lte:750, !animated, !human, !clothes"
-# score range may be seperate
+
+def createDerpiSearchQuery(def_query="solo, pony, safe, !animated, !human, !webm, !gif, !eqg, !comic, !meme", 
+    min_score=(), max_score=(), yes_tags=[], no_tags=[], tag_string=""):
+    """
+    Default query is the default, standard query
+
+    yes_tags and no_tags are lists of tags to be added.
+    """
+
+    # buncha regex to make this work properly with badly input strings 
+    # :D
+
+    # add tag_string and clean up with regex
+    query = re.sub(r'([\s]{1,99}$)|(,[\s]{1,99}$)',"",re.sub(r'[\s]{1,99}$',', ',def_query+" ")+re.sub(r'^[\s]{0,99}(?=\S)','',tag_string)+" ")
+
+    # add min and max score
+    if min_score != ():
+        query += ", score.gte:{}".format(int(min_score))
+    if max_score != ():
+        query += ", score.lte:{}".format(int(max_score))
+
+    # add yes and no tags.
+    if yes_tags != []:
+        query += ', ' + ', '.join(a for a in yes_tags)
+    if no_tags != []:
+        query += ', ' + ', '.join("!"+a for a in no_tags)
+
+    return query
+
+
+####
 
 def randomFun():
     derp = derpi()
@@ -480,13 +509,15 @@ def randomFun():
     for imgId in imgList:
         print(derp.findThatFileName(imgId))
 
-def testBatch():
+def main():
     """
     Test only. 
     To get 20 ponks images and 20 rd images
     """
-    s_query_rd = "rd, !pp" + ", " + default_queries
-    s_query_pp = "!rd, pp" + ", " + default_queries
+    s_query_rd = createDerpiSearchQuery(min_score=200, max_score=750, yes_tags=["rd"], no_tags=["pp","ts","fs"], tag_string="!clothes")
+    s_query_pp = createDerpiSearchQuery(min_score=200, max_score=750, yes_tags=["pp"], no_tags=["rd","ts","fs"], tag_string="!clothes")
+    print(s_query_pp)
+    print(s_query_rd)
     desired_tags = ["rainbow dash", "pinkie pie"]
 
     derp = derpi()
@@ -525,29 +556,9 @@ def testBatch():
         new_size=(400,400)
     )
 
-def main():
-    derp = derpi()
-
-    ### processing data for batch dl
-    s_query = "((!fs, pp) OR (!pp, fs)), solo, safe, score.gte:200, score.lte:1200, !animated" # this one is refined for two solo chars
-
-    imgList = derp.imageSearch(q=s_query, sf="score", n_get=20)
-
-    desired_tags = ["fluttershy", "pinkie pie"] # note same tags with dissimilar strings
-    # fuck I need a `too many characters in here` filter
-
-    # maybe instead of n_get, have it iterate through the tags and add where necessary.
-
-    dl_list = []
-    tag_list = {}
-    for id in imgList:
-        r = derp.getImageInfo(id)
-        dl_list.append(r["dl"])
-        tag_list[id] = [tag for tag in r["tags"] if tag in desired_tags]
-
-    print(dl_list, tag_list)
-
-    # derp.get(derp.combineApiUrl("/api/v1/json/filters/56027"), printJson=True)
-
 if __name__ == "__main__":
-    testBatch()
+    main()
+
+def randomCode():
+    print("Never Gonna Give You Up")
+    # derp.get(derp.combineApiUrl("/api/v1/json/filters/56027"), printJson=True)
