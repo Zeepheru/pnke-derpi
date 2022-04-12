@@ -4,8 +4,12 @@ import re
 import json
 import urllib
 import time
+from tqdm import tqdm
+import shutil
 
-from sympy import Q
+from PIL import Image
+
+
 
 """
 This is mostly draft, temporary (BWAHAHA) code.
@@ -23,6 +27,7 @@ Test image:
 
 """
 
+
 def dump_json(data):
     return json.dumps(data, indent=4, sort_keys=True)
 
@@ -30,6 +35,31 @@ def justHere(src_path):
     for root, dirs, files in os.walk(src_path):
         for f in files:
             print("")
+
+def createallfolders(f_path):
+    """
+    This somewhat works for full paths (folders.)
+
+    NOT TESTED WITH FILES
+    """
+    f_path += "\\"
+    print(f_path)
+
+    if not os.path.exists(f_path):
+        if "\\" not in f_path:
+            current_folder = f_path
+            if not os.path.exists(current_folder):
+                os.mkdir(current_folder)
+
+        else:
+            all_folders = re.findall(r'^.*?(?=\\)|(?<=\\).*?(?=\\)|(?<=\\).+$',f_path)
+            current_folder = all_folders[0] + "\\" + all_folders[1] # hahah wtf
+
+            for folder in all_folders[2:]:
+                current_folder = os.path.join(current_folder,folder)
+                if not os.path.exists(current_folder):
+                    # print("CREATING "+current_folder)
+                    os.mkdir(current_folder)
 
 ####
 
@@ -46,28 +76,184 @@ class imgDownloader():
         │   ├── derpi-tags/
 
         """
-        self.rel_path = r"/-data/"
+        self.rel_path = r"-data"
         self.def_path = os.path.join(os.getcwd(), self.rel_path)
+    
+    def writeJson(self, data, filepath):
+        if not filepath.endswith(".json"):
+            fiepath = filepath + ".json"
+
+        with open (filepath,'w', encoding='utf-8') as f:
+            f.write(dump_json(data))
+
+    def downloadFile(self, url, filepath):
+        r = requests.get(url, stream=True)
+        total_size = int(r.headers.get('content-length', 0))
+        block_size = 1024 #1 Kibibyte
+        t=tqdm(total=total_size, unit='iB', unit_scale=True)  
+
+        print("Downloading to: {}".format(filepath))
+
+        with open(filepath, 'wb') as f:
+            for data in r.iter_content(block_size):
+                t.update(len(data))
+                f.write(data)
+        t.close()
 
     def getImagesPresent(self, id_only=True):
         """
         lists images in the derpi-imgs directory 
         """
         if id_only:
-            return [re.sub(r'\.[a-zA-Z0-9]{2,4}$', '', a) for a in os.listdir(os.path.join(self.def_path, "derpi-imgs"))]
+            return [int(re.sub(r'\.[a-zA-Z0-9]{2,4}$', '', a)) for a in os.listdir(os.path.join(self.def_path, "derpi-imgs"))]
         else:
             return os.listdir(os.path.join(self.def_path, "derpi-imgs"))
+    
+    def extractFilename(self, filepath):
+        # returns only the filename.
+        return ""
 
-    def fullDownload(self, id_list=[], tags={}, dir_path="", export_json=True, download_images=True):
+    def convertResizeImage(self, filepath, new_size=(0,0), new_format="", delete_prev=True):
         """
+        Converts the image.
+        To the desired new size and new format (default: jpg)
+
+        some random code on resizing and cropping properly here.
+        """
+        def reduceSizeToFit(a, b):
+            """
+            reduces the size of a (x, y) to b (x, y)
+            a being the crop, b being the actual image dimensions
+            returns (x, y)
+            """
+            x_a, y_a = a[0], a[1]
+            x_b, y_b = b[0], b[1]
+
+            r_x = x_b / x_a
+            r_y = y_b / y_a
+            if r_x <= r_y:
+                x = int(x_a * r_x)
+                y = int(y_a * r_x)
+            else:
+                x = int(x_a * r_y)
+                y = int(y_a * r_y)
+
+            del x_a, y_a, x_b, y_b, r_x, r_y
+
+            return (x,y)
+
+        def getCropCoords(og_size, crop):
+            """
+            returns the (left, upper, right, lower)-tuple
+            required for Image to do its thing
+            """
+
+            return (
+                int((og_size[0] - crop[0])/2),
+                int((og_size[1] - crop[1])/2),
+                int(og_size[0] - (og_size[0] - crop[0])/2),
+                int(og_size[1] - (og_size[1] - crop[1])/2)
+            )
+        
+        if new_size == (0,0) and new_format == "":
+            # no resizing done.
+            return False
+
+        im = Image.open(filepath)
+        
+        if new_size != (0,0):
+            im = im.crop(
+                getCropCoords(im.size, reduceSizeToFit(new_size, im.size))
+            )
+            im = im.resize(new_size)
+
+        if new_format != "":
+            im = im.convert("RGB")
+            im.save(re.sub(r'\.[a-zA-Z0-9]{2,4}$', '', filepath) + "." + new_format)
+            if delete_prev:
+                if not filepath.endswith(new_format):
+                    os.remove(filepath)
+        else:
+            im.save(filepath)        
+
+        return True
+
+
+    def fullDownload(self, dl_list, dir_path, new_size=(0,0), new_format="", export_json=True, download_images=True, force_redownload=False, start_empty=False):
+        """
+        adding derpi as an arg is a stopgap measure lull
+        pls fix :(
+
         What this is (supposed) to do is to:
-        > given an inputed list of id's and corresponding dict of tags (sifted for important ones)
+        > given an inputed list of images (sifted for important ones)
         - check if images and tags? are in the fixed directories
         - download/copy images into a seperate folder
         - (Json) with a json file outlining tags in the main directory
+        - and then does the crop things on the output dir
+
+        dir_path likely will apply  to both the folder and the 
+        if empty string then ideally use datetime (TODO)
         """
 
+        download_folder = os.path.join(self.def_path, dir_path)
+        if start_empty:
+            #yeahhh boi
+            if os.path.exists(download_folder):
+                shutil.rmtree(download_folder)
 
+        if not os.path.exists(download_folder):
+            createallfolders(download_folder)
+
+    
+        if not force_redownload:
+            ids_not_needed = [id for id in list(dl_list) if id in self.getImagesPresent()]
+        else:
+            ids_not_needed = []
+
+        new_dl_list = {}
+        for id in list(dl_list):
+            # I KNOW there's a more pythonic way, shut up    
+            if id not in ids_not_needed:
+                new_dl_list[id] = dl_list[id]
+
+        #json first
+        if export_json:
+            tags = {}
+            for id in list(dl_list):
+                tags[id] = dl_list[id]["desired_tags"]
+
+            print("Writing json file to {}.json".format(dir_path))
+            self.writeJson(tags, os.path.join(self.def_path, dir_path + ".json"))
+
+        #then images
+        if download_images:
+
+            for id in list(new_dl_list):
+                # downloading first
+                self.downloadFile(
+                    new_dl_list[id]["dl"],
+                    os.path.join(self.def_path, "derpi-imgs", str(id) + "." + dl_list[id]["format"])
+                )
+            
+            for id in list(dl_list):
+                # then copying
+                src = os.path.join(self.def_path, "derpi-imgs", str(id) + "." + dl_list[id]["format"])
+                dst = os.path.join(self.def_path, dir_path, str(id) + "." + dl_list[id]["format"])
+                print("Copying {} to {}".format(src, dst))
+
+                shutil.copy(src, dst)
+
+        ## resizing crap
+        for f in os.listdir(download_folder):
+            print("Performing image functions on {}".format(f))
+
+            self.convertResizeImage(
+                os.path.join(download_folder, f),
+                new_size=new_size,
+                new_format=new_format
+            )
+
+        return True
 
 
 class derpi():
@@ -109,7 +295,7 @@ class derpi():
 
     def findThatFileName(self, id, printPost=False):
         """
-        What the fuck I am just bored
+        What the fuck I am just bored (yes)
 
         printPost is set to false for the iterative thing, 
         but really I should be using proper logging code ;)
@@ -181,7 +367,7 @@ class derpi():
         api_path = r'/api/v1/json/search/images'
         q = urllib.parse.quote(q)
 
-        pg = 0
+        pg = 1
         list_of_images = []
 
         while len(list_of_images) <= n_get:
@@ -220,7 +406,6 @@ class derpi():
 
         return list_of_images
 
-
     def imageSearch(self, q="safe", sf="first_seen_at", sd="desc", 
         n_get=50, per_page=50):
         """
@@ -246,19 +431,19 @@ class derpi():
         # just saying, the order _might_ be screwed, somehow.
         """
         api_path = r'/api/v1/json/search/images'
-        n_iter = int(n_get / per_page)
+        n_iter = int((n_get - 1) / per_page)
         list_of_images = []
 
         if n_get < per_page:
             per_page = int(n_get)
 
-        for pg in range(n_iter+1):
+        for pg in range(n_iter + 1):
             url = self.combineApiUrl(
                 api_path, 
                 q_params={
                     "q":urllib.parse.quote(q),
                     "filter_id":56027,
-                    "page":pg,
+                    "page":pg+1,
                     "per_page":per_page,
                     "sd":sd,
                     "sf":sf
@@ -285,12 +470,60 @@ class derpi():
         return list_of_images
 
 ####
+default_queries = "solo, pony, safe, score.gte:200, score.lte:750, !animated, !human, !clothes"
+# score range may be seperate
+
 def randomFun():
     derp = derpi()
 
     imgList = derp.imageSearch(q="artist:marsminer, explicit, score.gte:100", sf="score", n_get=100)
     for imgId in imgList:
         print(derp.findThatFileName(imgId))
+
+def testBatch():
+    """
+    Test only. 
+    To get 20 ponks images and 20 rd images
+    """
+    s_query_rd = "rd, !pp" + ", " + default_queries
+    s_query_pp = "!rd, pp" + ", " + default_queries
+    desired_tags = ["rainbow dash", "pinkie pie"]
+
+    derp = derpi()
+
+    # rd
+    rd_imgList = derp.imageSearch(q=s_query_rd, sf="score", n_get=150)
+    dl_list = {}
+    for id in rd_imgList:
+        r = derp.getImageInfo(id)
+        dl_list[id] = {
+            "dl":r["dl"],
+            "desired_tags":[tag for tag in r["tags"] if tag in desired_tags],
+            "format":r["format"]
+        }
+
+    # pp
+    pp_imgList = derp.imageSearch(q=s_query_pp, sf="score", n_get=150)
+    for id in pp_imgList:
+        r = derp.getImageInfo(id)
+        if id in list(dl_list):
+            print("UHHHHHHHHHHHH" + str(id))
+
+        dl_list[id] = {
+            "dl":r["dl"],
+            "desired_tags":[tag for tag in r["tags"] if tag in desired_tags],
+            "format":r["format"]
+        }
+
+    # after combining, 
+    dl = imgDownloader()
+    dl.fullDownload(
+        dl_list=dl_list,
+        dir_path="test-1-cropped",
+        start_empty=True,
+        new_format="jpg",
+        new_size=(400,400)
+    )
 
 def main():
     derp = derpi()
@@ -317,4 +550,4 @@ def main():
     # derp.get(derp.combineApiUrl("/api/v1/json/filters/56027"), printJson=True)
 
 if __name__ == "__main__":
-    main()
+    testBatch()
