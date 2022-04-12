@@ -516,14 +516,12 @@ def main():
     """
     s_query_rd = createDerpiSearchQuery(min_score=200, max_score=750, yes_tags=["rd"], no_tags=["pp","ts","fs"], tag_string="!clothes")
     s_query_pp = createDerpiSearchQuery(min_score=200, max_score=750, yes_tags=["pp"], no_tags=["rd","ts","fs"], tag_string="!clothes")
-    print(s_query_pp)
-    print(s_query_rd)
     desired_tags = ["rainbow dash", "pinkie pie"]
 
     derp = derpi()
 
     # rd
-    rd_imgList = derp.imageSearch(q=s_query_rd, sf="score", n_get=150)
+    rd_imgList = derp.imageSearch(q=s_query_rd, sf="score", n_get=125)
     dl_list = {}
     for id in rd_imgList:
         r = derp.getImageInfo(id)
@@ -534,7 +532,7 @@ def main():
         }
 
     # pp
-    pp_imgList = derp.imageSearch(q=s_query_pp, sf="score", n_get=150)
+    pp_imgList = derp.imageSearch(q=s_query_pp, sf="score", n_get=125)
     for id in pp_imgList:
         r = derp.getImageInfo(id)
         if id in list(dl_list):
