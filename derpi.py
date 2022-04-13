@@ -4,6 +4,7 @@ import re
 import json
 import urllib
 import time
+import pandas as pd
 from tqdm import tqdm
 import shutil
 
@@ -81,7 +82,7 @@ class imgDownloader():
     
     def writeJson(self, data, filepath):
         if not filepath.endswith(".json"):
-            fiepath = filepath + ".json"
+            filepath = filepath + ".json"
 
         with open (filepath,'w', encoding='utf-8') as f:
             f.write(dump_json(data))
@@ -179,7 +180,8 @@ class imgDownloader():
         return True
 
 
-    def fullDownload(self, dl_list, dir_path, new_size=(0,0), new_format="", export_json=True, download_images=True, force_redownload=False, start_empty=False):
+    def fullDownload(self, dl_list, dir_path, new_size=(0,0), new_format="", 
+        export_json=False, export_csv=True, download_images=True, force_redownload=False, start_empty=False):
         """
         adding derpi as an arg is a stopgap measure lull
         pls fix :(
@@ -216,8 +218,21 @@ class imgDownloader():
             if id not in ids_not_needed:
                 new_dl_list[id] = dl_list[id]
 
-        #json first
-        if export_json:
+        ## csv/json first
+        if export_csv:
+            # TODO no functions yet, code is here until needed
+            # also yes, still the main directory
+
+            data = {'id': list(dl_list),
+                    'tag': [dl_list[id]["desired_tags"][0] for id in list(dl_list)] # note taking the first elem of the desired tags (USUALLY one anyway)
+                    }
+
+            df = pd.DataFrame(data, columns=['id', 'tag'])
+
+            print("Writing csv file to {}.csv".format(dir_path))
+            df.to_csv(os.path.join(self.def_path, dir_path + ".csv"), index = False, header=True)
+
+        elif export_json:
             tags = {}
             for id in list(dl_list):
                 tags[id] = dl_list[id]["desired_tags"]
@@ -225,7 +240,7 @@ class imgDownloader():
             print("Writing json file to {}.json".format(dir_path))
             self.writeJson(tags, os.path.join(self.def_path, dir_path + ".json"))
 
-        #then images
+        ## then images
         if download_images:
 
             for id in list(new_dl_list):
@@ -492,70 +507,15 @@ def createDerpiSearchQuery(def_query="solo, pony, safe, !animated, !human, !webm
         query += ", score.lte:{}".format(int(max_score))
 
     # add yes and no tags.
-    if yes_tags != []:
+    if yes_tags != [] and yes_tags != None:
         query += ', ' + ', '.join(a for a in yes_tags)
-    if no_tags != []:
+    if no_tags != [] and no_tags != None:
         query += ', ' + ', '.join("!"+a for a in no_tags)
 
     return query
 
 
 ####
-
-def randomFun():
-    derp = derpi()
-
-    imgList = derp.imageSearch(q="artist:marsminer, explicit, score.gte:100", sf="score", n_get=100)
-    for imgId in imgList:
-        print(derp.findThatFileName(imgId))
-
-def main():
-    """
-    Test only. 
-    To get 20 ponks images and 20 rd images
-    """
-    s_query_rd = createDerpiSearchQuery(min_score=200, max_score=750, yes_tags=["rd"], no_tags=["pp","ts","fs"], tag_string="!clothes")
-    s_query_pp = createDerpiSearchQuery(min_score=200, max_score=750, yes_tags=["pp"], no_tags=["rd","ts","fs"], tag_string="!clothes")
-    desired_tags = ["rainbow dash", "pinkie pie"]
-
-    derp = derpi()
-
-    # rd
-    rd_imgList = derp.imageSearch(q=s_query_rd, sf="score", n_get=125)
-    dl_list = {}
-    for id in rd_imgList:
-        r = derp.getImageInfo(id)
-        dl_list[id] = {
-            "dl":r["dl"],
-            "desired_tags":[tag for tag in r["tags"] if tag in desired_tags],
-            "format":r["format"]
-        }
-
-    # pp
-    pp_imgList = derp.imageSearch(q=s_query_pp, sf="score", n_get=125)
-    for id in pp_imgList:
-        r = derp.getImageInfo(id)
-        if id in list(dl_list):
-            print("UHHHHHHHHHHHH" + str(id))
-
-        dl_list[id] = {
-            "dl":r["dl"],
-            "desired_tags":[tag for tag in r["tags"] if tag in desired_tags],
-            "format":r["format"]
-        }
-
-    # after combining, 
-    dl = imgDownloader()
-    dl.fullDownload(
-        dl_list=dl_list,
-        dir_path="test-1-cropped",
-        start_empty=True,
-        new_format="jpg",
-        new_size=(400,400)
-    )
-
-if __name__ == "__main__":
-    main()
 
 def randomCode():
     print("Never Gonna Give You Up")
