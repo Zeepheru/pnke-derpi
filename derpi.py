@@ -11,6 +11,7 @@ import shutil
 from PIL import Image
 
 
+Image.MAX_IMAGE_PIXELS = None # disabling the protecting lol
 
 """
 This is mostly draft, temporary (BWAHAHA) code.
@@ -224,10 +225,11 @@ class imgDownloader():
             # also yes, still the main directory
 
             data = {'id': list(dl_list),
-                    'tag': [dl_list[id]["desired_tags"][0] for id in list(dl_list)] # note taking the first elem of the desired tags (USUALLY one anyway)
+                    'tag': [dl_list[id]["desired_tags"][0] for id in list(dl_list)], # note taking the first elem of the desired tags (USUALLY one anyway)
+                    'dl': [dl_list[id]["dl"] for id in list(dl_list)]
                     }
 
-            df = pd.DataFrame(data, columns=['id', 'tag'])
+            df = pd.DataFrame(data, columns=['id', 'tag', 'dl'])
 
             print("Writing csv file to {}.csv".format(dir_path))
             df.to_csv(os.path.join(self.def_path, dir_path + ".csv"), index = False, header=True)
@@ -243,7 +245,9 @@ class imgDownloader():
         ## then images
         if download_images:
 
-            for id in list(new_dl_list):
+            for n, id in enumerate(list(new_dl_list)):
+                print("({}/{}) - {}%".format(n+1, len(list(new_dl_list)), (n+1)/len(list(new_dl_list))*100)) # the math lol
+
                 # downloading first
                 self.downloadFile(
                     new_dl_list[id]["dl"],
@@ -486,7 +490,7 @@ class derpi():
 
 ####
 
-def createDerpiSearchQuery(def_query="solo, pony, safe, !animated, !human, !webm, !gif, !eqg, !comic, !meme", 
+def createDerpiSearchQuery(def_query="solo, pony, !animated, !human, !webm, !gif, !eqg, !comic, !meme, created_at.lte:3 days ago", 
     min_score=(), max_score=(), yes_tags=[], no_tags=[], tag_string=""):
     """
     Default query is the default, standard query
