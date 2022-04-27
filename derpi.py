@@ -218,7 +218,7 @@ class imgDownloader():
             # I KNOW there's a more pythonic way, shut up    
             if id not in ids_not_needed:
                 new_dl_list[id] = dl_list[id]
-
+                
         ## csv/json first
         if export_csv:
             # TODO no functions yet, code is here until needed
@@ -226,7 +226,8 @@ class imgDownloader():
 
             data = {'id': list(dl_list),
                     'tag': [dl_list[id]["desired_tags"][0] for id in list(dl_list)], # note taking the first elem of the desired tags (USUALLY one anyway)
-                    'dl': [dl_list[id]["dl"] for id in list(dl_list)]
+                    'dl': [dl_list[id]["dl"] for id in list(dl_list)],
+                    'fname': [dl_list[id]["fname"] for id in list(dl_list)] 
                     }
 
             df = pd.DataFrame(data, columns=['id', 'tag', 'dl'])
@@ -251,7 +252,8 @@ class imgDownloader():
                 # downloading first
                 self.downloadFile(
                     new_dl_list[id]["dl"],
-                    os.path.join(self.def_path, "derpi-imgs", str(id) + "." + dl_list[id]["format"])
+                    os.path.join(self.def_path, "derpi-imgs", 
+                    new_dl_list["fname"])
                 )
             
             for id in list(dl_list):
@@ -365,6 +367,7 @@ class derpi():
         
         r_dict = r_json["image"]
         r_dict["dl"] = r_json["image"]["representations"]["full"]
+        r_dict["fname"] = str(id) + "." + r_dict["format"]
 
         return r_dict
 
