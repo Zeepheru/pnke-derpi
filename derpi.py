@@ -367,7 +367,7 @@ class derpi():
         
         r_dict = r_json["image"]
         r_dict["dl"] = r_json["image"]["representations"]["full"]
-        r_dict["fname"] = str(id) + "." + r_dict["format"]
+        r_dict["fname"] = str(id) + "." + r_dict["format"] 
 
         return r_dict
 
