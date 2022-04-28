@@ -5,6 +5,7 @@ import json
 import urllib
 import time
 import pandas as pd
+from scipy import rand
 from tqdm import tqdm
 import shutil
 
@@ -45,7 +46,7 @@ def createallfolders(f_path):
     NOT TESTED WITH FILES
     """
     f_path += "\\"
-    print(f_path)
+    # print(f_path)
 
     if not os.path.exists(f_path):
         if "\\" not in f_path:
@@ -180,6 +181,37 @@ class imgDownloader():
 
         return True
 
+    def loadFromCSVlegacy(self, filepath):
+        """
+        returns a list of ids, for now (may be configurable in the future idk lollll)
+
+        """
+        filepath = os.path.join(self.def_path, filepath)
+
+        if not os.path.exists(filepath) or not filepath.endswith(".csv"):
+            print("Not a CSV File / Doesn't exist.")
+            return
+
+        df = pd.read_csv(filepath)
+        return df['id'].tolist()
+
+    def loadFromCSV(self, filepath):
+        """
+        loads from a CSV file with the (newest default format)
+        returns dl_list, a dict with each id and the corresponding required data
+
+        Note: I know I should really just make everything run on Pandas df's
+        but I'm lazy and can't be arsed, so have fun with slower running code (as if calling the api is _blazing fast_)
+        """
+        filepath = os.path.join(self.def_path, filepath)
+
+        if not os.path.exists(filepath) or not filepath.endswith(".csv"):
+            print("Not a CSV File / Doesn't exist.")
+            return
+
+        df = pd.read_csv(filepath)
+        df.rename(columns = {'tags':'desired_tags'}, inplace = True) #me dum dum
+        return df.set_index('id').T.to_dict()
 
     def fullDownload(self, dl_list, dir_path, new_size=(0,0), new_format="", 
         export_json=False, export_csv=True, download_images=True, force_redownload=False, start_empty=False):
@@ -226,11 +258,15 @@ class imgDownloader():
 
             data = {'id': list(dl_list),
                     'tag': [dl_list[id]["desired_tags"][0] for id in list(dl_list)], # note taking the first elem of the desired tags (USUALLY one anyway)
-                    'dl': [dl_list[id]["dl"] for id in list(dl_list)],
+                    'src': [dl_list[id]["src"] for id in list(dl_list)],
                     'fname': [dl_list[id]["fname"] for id in list(dl_list)] 
                     }
 
-            df = pd.DataFrame(data, columns=['id', 'tag', 'dl'])
+            df = pd.DataFrame(data, columns=['id', 'tag', 'src', 'fname'])
+
+            if new_format != "":
+                # I think this works
+                df["fname"]= df.apply(lambda x: re.sub(r'\.[a-zA-Z0-9]{2,4}$', r'\.'+new_format, x))
 
             print("Writing csv file to {}.csv".format(dir_path))
             df.to_csv(os.path.join(self.def_path, dir_path + ".csv"), index = False, header=True)
@@ -251,7 +287,7 @@ class imgDownloader():
 
                 # downloading first
                 self.downloadFile(
-                    new_dl_list[id]["dl"],
+                    new_dl_list[id]["src"],
                     os.path.join(self.def_path, "derpi-imgs", 
                     new_dl_list["fname"])
                 )
@@ -366,7 +402,7 @@ class derpi():
 
         
         r_dict = r_json["image"]
-        r_dict["dl"] = r_json["image"]["representations"]["full"]
+        r_dict["src"] = r_json["image"]["representations"]["full"]
         r_dict["fname"] = str(id) + "." + r_dict["format"] 
 
         return r_dict
@@ -491,6 +527,8 @@ class derpi():
 
         return list_of_images
 
+    
+
 ####
 
 def createDerpiSearchQuery(def_query="solo, pony, !animated, !human, !webm, !gif, !eqg, !comic, !meme, created_at.lte:3 days ago", 
@@ -527,3 +565,6 @@ def createDerpiSearchQuery(def_query="solo, pony, !animated, !human, !webm, !gif
 def randomCode():
     print("Never Gonna Give You Up")
     # derp.get(derp.combineApiUrl("/api/v1/json/filters/56027"), printJson=True)
+
+if __name__ == "__main__":
+    randomCode()
