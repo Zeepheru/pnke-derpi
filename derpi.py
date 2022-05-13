@@ -114,6 +114,9 @@ class imgDownloader():
             return os.listdir(os.path.join(self.def_path, "derpi-imgs"))
     
     def extractFilename(self, filepath):
+        """
+        DOES NOTHING AT THE MOMENT.
+        """
         # returns only the filename.
         return ""
 
@@ -204,10 +207,11 @@ class imgDownloader():
         Note: I know I should really just make everything run on Pandas df's
         but I'm lazy and can't be arsed, so have fun with slower running code (as if calling the api is _blazing fast_)
         """
+        filepath = re.sub(r'\.csv\.csv$', r'\.csv', filepath) #idiot(me)-proofing
         filepath = os.path.join(self.def_path, filepath)
 
         if not os.path.exists(filepath) or not filepath.endswith(".csv"):
-            print("Not a CSV File / Doesn't exist.")
+            print("{filepath} - Not a CSV File / Doesn't exist.")
             return
 
         df = pd.read_csv(filepath)
@@ -216,7 +220,7 @@ class imgDownloader():
         df["desired_tags"] = df["desired_tags"].apply(lambda x: [x]) # changes it to a list, because that's how my data treats it
         # I should probably change this out
 
-        if return_type == "json":
+        if return_type == "dict":
             return df.set_index('id').T.to_dict()
         elif return_type == "df" or return_type == "dataframe": 
             return df
@@ -308,11 +312,19 @@ class imgDownloader():
             
             print("Copying Files.")
             for id in list(dl_list):
-                src = os.path.join(self.def_path, "derpi-imgs", str(id)+"."+dl_list["id"]["format"])
-                dst = os.path.join(self.def_path, dir_path, str(id)+"."+dl_list["id"]["format"])
-                print("Copying {} to {}".format(src, dst))
+                try:
+                    src = os.path.join(self.def_path, "derpi-imgs", str(id)+"."+dl_list[id]["format"])
+                    dst = os.path.join(self.def_path, dir_path, str(id)+"."+dl_list[id]["format"])
+                    print("Copying {} to {}".format(src, dst))
 
-                shutil.copy(src, dst)
+                    shutil.copy(src, dst)
+                except:
+                    # This means the OG file is a jpg beacuse I fucked some stuff up
+                    src = os.path.join(self.def_path, "derpi-imgs", str(id)+"."+"jpg")
+                    dst = os.path.join(self.def_path, dir_path, str(id)+"."+"jpg")
+                    print("Copying {} to {}".format(src, dst))
+
+                    shutil.copy(src, dst)
 
 
         ## resizing crap
@@ -330,6 +342,8 @@ class imgDownloader():
 
     def quarantine(self, no_tags=[], src="", dst=""):
         """
+        !! PATHS ARE TENTATIVELY RELATIVE WITHIN THE -data folder. !!!
+
         Function to basically batch move a bunch of files out of certain directories.
         This was an issue after I realised I'd turned off the explicit filter
         
@@ -338,25 +352,25 @@ class imgDownloader():
         might also have mmmgs use idk :)
         """
    
-        if os.path.exists(os.path.join(self.rel_path, src)):
-            src = os.path.join(self.rel_path, src)
-        elif os.path.exists(src):
+        src = os.path.join(self.def_path, src) # only def_path works btw
+        if os.path.exists(src):
             pass
         else:
-            print(f"Source path {src} does not exist.)
+            print(f"Source path {src} does not exist.")
             return
                   
         if re.search(r'.:\\', dst) != None:
             if not os.path.exists(dst):
-                  create
+                createallfolders(dst)
         else:
-            dst = os.path.join(self.rel_path, dst)
-            if not 
+            dst = os.path.join(self.def_path, dst)
+            if not os.path.exists(dst):
+                createallfolders(dst)
         
         # new system for keeping track of filenames
         img_filenames = {}
-        for f in os.lisdir(src)
-            img_filenames[re.sub(r'\..+$', '', a)] = f
+        for f in os.listdir(src):
+            img_filenames[re.sub(r'\..+$', '', f)] = f
             # so the ids correspond to the filenames, I'm doing the regex recursively anyway
         idlist = list(img_filenames)
         if idlist == []:
@@ -367,19 +381,22 @@ class imgDownloader():
         # images to move
                   
         derp = derpi()
-        for id in idlist:
+        for i, id in enumerate(idlist):
+            print(f'Obtaining info for {id} from Derpi [{i+1}/{len(idlist)}].')
+
             img = derp.getImageInfo(id)
-            if any(a in tags for a in no_tags):
+            if any(a in img["tags"] for a in no_tags):
                   move_list[id] = img
+                  break
+                  ## Debug
             
-            ## Debug
-            break
+            
         print(f"{len(list(move_list))} images found with the tag(s) {no_tags}.")
         
         # Move
-        for id in list(move_list)
-            img_src = os.path.join(src, img_filenames)
-            img_dst = os.path.join(dst, img_filenames)
+        for id in list(move_list):
+            img_src = os.path.join(src, img_filenames[id])
+            img_dst = os.path.join(dst, img_filenames[id])
             print(f"Moving {img_src} to {img_dst}")
             shutil.move(img_src, img_dst)
             

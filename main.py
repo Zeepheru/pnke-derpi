@@ -1,3 +1,4 @@
+from sympy import N
 from derpi import *
 
 global mane6, v
@@ -196,6 +197,9 @@ def updateSet(dataset_name="mane6-6000"):
         download_images=False
     )
 
+
+
+
 def hybrid():
     """
     6k boi
@@ -260,7 +264,7 @@ def hybrid():
     dl.fullDownload(
         dl_list=dl_list,
         dir_path=dataset_name,
-        start_empty=True,
+        start_empty=False,
         new_format="jpg",
         new_size=(400,400)
     )
@@ -268,14 +272,16 @@ def hybrid():
 def derpLoadFromCSV():
     """
     just from the CSV
+    Just add extra files lol
     """
     derp = derpi()
     dl = imgDownloader()
     dl_list = {}
-    dataset_name = "mane6-6000"
+    dataset_name = "mane6-8000"
     
     print("Loading CSV")
     dl_list = dl.loadFromCSV(filepath="mane6-6000.csv")
+    dl_list += dl.loadFromCSV(filepath="mane6-3000-v2.csv")
 
     print("Starting DL Procedure.")
     dl.fullDownload(
@@ -284,12 +290,79 @@ def derpLoadFromCSV():
         start_empty=True,
         new_format="jpg",
         new_size=(400,400),
-        export_csv=False
+        export_csv=True
+    )
+
+def getSpecificNumber():
+    # for a 120-ish img testset
+    # 20 per char + testSetA
+
+    derp = derpi()
+    dl = imgDownloader()
+    dl_list = {}
+    dataset_name = "mane6-testset-b-rs400"
+
+    general_tag_string = "!clothes"
+    min_score = 100
+    max_score = 1000
+    extra_no_tags = [
+        "g5"
+    ]
+
+    dl_list = dl.loadFromCSV(filepath="mane6-testset-a-rs400.csv")
+    no_ids = dl.loadFromCSV(filepath="mane6-6000.csv", return_type="df")["id"].tolist() # already in m6-6000
+    desired_no_per_char = 20
+
+    for pony in mane6:
+        print("\nQuerying for tag: `{}`".format(pony))
+
+        pony_query = createDerpiSearchQuery(min_score=min_score, max_score=max_score, 
+            yes_tags=[pony], no_tags=[horse for horse in mane6 if horse != pony] + extra_no_tags, tag_string=general_tag_string)
+
+        imgList = derp.imageSearch(q=pony_query, sf="random", n_get=50) # random now
+        # I've not put in an actual method to do the numbers properly, so here's just 50 and I'll cut it down to 
+
+        n = 0
+
+        for i, id in enumerate(imgList):
+            if n >= desired_no_per_char:
+                break
+
+            if id in no_ids:
+                # don't want the image
+                continue
+
+            if v: 
+                print(f'Obtaining {id} from Derpi [{n+1}/{desired_no_per_char}].')
+
+            r = derp.getImageInfo(id)
+            dl_list[id] = {
+                "src":r["src"],
+                "desired_tags":[tag for tag in r["tags"] if tag in mane6],
+                "format":r["format"],
+                "fname":r["fname"]
+            }
+
+            n += 1
+
+    dl.fullDownload(
+        dl_list=dl_list,
+        dir_path=dataset_name,
+        start_empty=True,
+        new_format="jpg",
+        new_size=(400,400),
+        export_csv=True
     )
 
 ######
 def main():
-    updateSet()
+    updateSet(dataset_name="mane6-3000-v2")
+    derpLoadFromCSV()
+
+def lull():
+    dl = imgDownloader()
+    dl.quarantine(src="derpi-imgs",dst="temp-dir",no_tags=["explicit"])
+    # it works, just remember to remove the break
 
 if __name__ == '__main__':
     main()
