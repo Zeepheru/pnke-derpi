@@ -1,6 +1,7 @@
 from derpi import *
 
-global mane6
+global mane6, v
+v = True
 mane6 = [
         "twilight sparkle",
         "fluttershy",
@@ -166,20 +167,17 @@ def mane6TestSet():
         new_format="jpg"
     )
 
-def updateMane6_3000():
-    # also tests the csv loader
-    # gets the list of ids from the csv
-    # then calls getImageInfo
+def updateSet(dataset_name="mane6-6000"):
     derp = derpi()
     dl = imgDownloader()
     dl_list = {}
-    dataset_name = "mane6-3000-v2"
 
-    ids = dl.loadFromCSVlegacy(filepath="mane6-3000-v2.csv")
+    ids = dl.loadFromCSV(filepath=f"{dataset_name}.csv", return_type="df")["id"].tolist()
     print(f"CSV loaded. len = {len(ids)}")
 
-    for id in ids:
-        print(id)
+    for i, id in enumerate(ids):
+
+        print(f'Obtaining info for {id} from Derpi [{i+1}/{len(list(ids))}].')
         r = derp.getImageInfo(id)
         dl_list[id] = { ## THIS WHOLE SECTION SHOULD JUST BE LOADED FROM the CSV; also hybrid csv+api datasets
             "src":r["src"],
@@ -193,10 +191,12 @@ def updateMane6_3000():
         dir_path=dataset_name,
         start_empty=True,
         new_format="jpg",
-        new_size=(400,400)
+        new_size=(400,400),
+        export_csv=True,
+        download_images=False
     )
 
-def mane6_6000():
+def hybrid():
     """
     6k boi
     this is a hybrid loading scheme, with both API calls and 
@@ -206,44 +206,56 @@ def mane6_6000():
     dl = imgDownloader()
     dl_list = {}
     dataset_name = "mane6-6000"
+    general_tag_string = "!clothes"
+    min_score = 100
+    max_score = 1000
+    extra_no_tags = [
+        "g5"
+    ]
 
-    dl_list = dl.loadFromCSV(filepath="mane6-3000-v2.csv")
-    print(f"CSV loaded. len = {len(list(dl_list))}")
-    print(dl_list[list(dl_list)[0]])
+    dl_list_0 = dl.loadFromCSV(filepath="mane6-3000-v2.csv")
+    # print(f"CSV loaded. len = {len(list(dl_list))}")
+    # print(dl_list[list(dl_list)[0]])
 
     # now we have the initial 3000 images
     # and because I'm lazy, the way I'll do it is to:
     # do the API search calls for all 6000, but check if the image is already in dl_list
     # if so, don't individually query
 
-    dataset_name = "mane6-6000"
-    general_tag_string = "!clothes"
-    min_score = 200
-    max_score = 900
-    extra_no_tags = [
-        "g5"
-    ]
-
     images_per_char = 1000 # total of 6000
 
-
-    dl_list = {}
     for pony in mane6:
         print("\nQuerying for tag: `{}`".format(pony))
 
         pony_query = createDerpiSearchQuery(min_score=min_score, max_score=max_score, 
             yes_tags=[pony], no_tags=[horse for horse in mane6 if horse != pony] + extra_no_tags, tag_string=general_tag_string)
 
-        imgList = derp.imageSearch(q=pony_query, sf="score", n_get=images_per_char)
+        imgList = derp.imageSearch(q=pony_query, sf="random", n_get=images_per_char) # random now
         
-        for id in imgList:
-            if id not in list(dl_list):
+        for i, id in enumerate(imgList):
+            if id not in list(dl_list_0):
+                if v: 
+                    print(f'Obtaining {id} from Derpi [{i+1}/{len(list(imgList))}].')
+
                 r = derp.getImageInfo(id)
                 dl_list[id] = {
                     "src":r["src"],
                     "desired_tags":[tag for tag in r["tags"] if tag in mane6],
-                    "format":r["format"]
+                    "format":r["format"],
+                    "fname":r["fname"]
                 }
+            elif id in list(dl_list_0):
+                if v: 
+                    print(f'Obtaining {id} from CSV [{i+1}/{len(list(imgList))}].')
+
+                dl_list[id] = { #prolly works
+                    "src":dl_list_0[id]["src"],
+                    "desired_tags":[dl_list_0[id]["tag"]],
+                    "format":dl_list_0[id]["format"],
+                    "fname":dl_list_0[id]["fname"]
+                }
+            else:
+                print(f'What the fuck: {id} - this is impossible.')
 
     dl.fullDownload(
         dl_list=dl_list,
@@ -253,9 +265,31 @@ def mane6_6000():
         new_size=(400,400)
     )
 
+def derpLoadFromCSV():
+    """
+    just from the CSV
+    """
+    derp = derpi()
+    dl = imgDownloader()
+    dl_list = {}
+    dataset_name = "mane6-6000"
+    
+    print("Loading CSV")
+    dl_list = dl.loadFromCSV(filepath="mane6-6000.csv")
+
+    print("Starting DL Procedure.")
+    dl.fullDownload(
+        dl_list=dl_list,
+        dir_path=dataset_name,
+        start_empty=True,
+        new_format="jpg",
+        new_size=(400,400),
+        export_csv=False
+    )
+
 ######
 def main():
-    mane6_6000()
+    updateSet()
 
 if __name__ == '__main__':
     main()

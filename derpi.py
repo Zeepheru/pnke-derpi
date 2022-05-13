@@ -6,6 +6,7 @@ import urllib
 import time
 import pandas as pd
 from scipy import rand
+from sympy import true
 from tqdm import tqdm
 import shutil
 
@@ -195,7 +196,7 @@ class imgDownloader():
         df = pd.read_csv(filepath)
         return df['id'].tolist()
 
-    def loadFromCSV(self, filepath):
+    def loadFromCSV(self, filepath, return_type="dict"):
         """
         loads from a CSV file with the (newest default format)
         returns dl_list, a dict with each id and the corresponding required data
@@ -210,8 +211,18 @@ class imgDownloader():
             return
 
         df = pd.read_csv(filepath)
-        df.rename(columns = {'tags':'desired_tags'}, inplace = True) #me dum dum
-        return df.set_index('id').T.to_dict()
+        df.rename(columns = {'tag':'desired_tags'}, inplace = True) #me dum dum
+        df.rename(columns = {'tags':'desired_tags'}, inplace = True) # also / in case lol
+        df["desired_tags"] = df["desired_tags"].apply(lambda x: [x]) # changes it to a list, because that's how my data treats it
+        # I should probably change this out
+
+        if return_type == "json":
+            return df.set_index('id').T.to_dict()
+        elif return_type == "df" or return_type == "dataframe": 
+            return df
+        else:
+            print("Wrong return_type specified.")
+            return None
 
     def fullDownload(self, dl_list, dir_path, new_size=(0,0), new_format="", 
         export_json=False, export_csv=True, download_images=True, force_redownload=False, start_empty=False):
@@ -259,14 +270,17 @@ class imgDownloader():
             data = {'id': list(dl_list),
                     'tag': [dl_list[id]["desired_tags"][0] for id in list(dl_list)], # note taking the first elem of the desired tags (USUALLY one anyway)
                     'src': [dl_list[id]["src"] for id in list(dl_list)],
-                    'fname': [dl_list[id]["fname"] for id in list(dl_list)] 
+                    'fname': [dl_list[id]["fname"] for id in list(dl_list)],
+                    'format': [dl_list[id]["format"] for id in list(dl_list)] 
                     }
 
-            df = pd.DataFrame(data, columns=['id', 'tag', 'src', 'fname'])
+            df = pd.DataFrame(data, columns=['id', 'tag', 'src', 'fname', 'format'])
 
             if new_format != "":
                 # I think this works
-                df["fname"]= df.apply(lambda x: re.sub(r'\.[a-zA-Z0-9]{2,4}$', r'\.'+new_format, x))
+
+                ## this basically changes the fnames in the df to new fnames
+                df["fname"] = df["fname"].apply(lambda x: re.sub(r'(?<=\.)[a-zA-Z0-9]+$', f'{new_format}', x))
 
             print("Writing csv file to {}.csv".format(dir_path))
             df.to_csv(os.path.join(self.def_path, dir_path + ".csv"), index = False, header=True)
@@ -289,20 +303,22 @@ class imgDownloader():
                 self.downloadFile(
                     new_dl_list[id]["src"],
                     os.path.join(self.def_path, "derpi-imgs", 
-                    new_dl_list["fname"])
+                    new_dl_list[id]["fname"])
                 )
             
+            print("Copying Files.")
             for id in list(dl_list):
-                # then copying
-                src = os.path.join(self.def_path, "derpi-imgs", str(id) + "." + dl_list[id]["format"])
-                dst = os.path.join(self.def_path, dir_path, str(id) + "." + dl_list[id]["format"])
+                src = os.path.join(self.def_path, "derpi-imgs", str(id)+"."+dl_list["id"]["format"])
+                dst = os.path.join(self.def_path, dir_path, str(id)+"."+dl_list["id"]["format"])
                 print("Copying {} to {}".format(src, dst))
 
                 shutil.copy(src, dst)
 
+
         ## resizing crap
-        for f in os.listdir(download_folder):
-            print("Performing image functions on {}".format(f))
+        image_files = os.listdir(download_folder)
+        for i, f in enumerate(image_files):
+            print(f"Performing image functions on {f} [{i+1}/{len(image_files)}]")
 
             self.convertResizeImage(
                 os.path.join(download_folder, f),
@@ -311,6 +327,15 @@ class imgDownloader():
             )
 
         return True
+
+    def quarantine(self, tags=[], src="", dst=""):
+        """
+        Function to basically batch move a bunch of files out of certain directories.
+        This was an issue after I realised I'd turned off the 
+
+        might also have mmmgs use idk :)
+        """
+        self.rel_path
 
 
 class derpi():
@@ -382,6 +407,9 @@ class derpi():
         inputs id
         returns r_json["image"] as a dict
         with some new additions for ease of access
+
+        importantly, the keys:
+            src, fname, format, tags
         """
 
         try:
@@ -532,7 +560,7 @@ class derpi():
 ####
 
 def createDerpiSearchQuery(def_query="solo, pony, !animated, !human, !webm, !gif, !eqg, !comic, !meme, created_at.lte:3 days ago", 
-    min_score=(), max_score=(), yes_tags=[], no_tags=[], tag_string=""):
+    min_score=(), max_score=(), yes_tags=[], no_tags=[], tag_string="", sfw=True):
     """
     Default query is the default, standard query
 
@@ -542,8 +570,13 @@ def createDerpiSearchQuery(def_query="solo, pony, !animated, !human, !webm, !gif
     # buncha regex to make this work properly with badly input strings 
     # :D
 
+    if sfw:
+        # yes.
+        yes_tags.append("safe")
+        no_tags.append("explicit")
+
     # add tag_string and clean up with regex
-    query = re.sub(r'([\s]{1,99}$)|(,[\s]{1,99}$)',"",re.sub(r'[\s]{1,99}$',', ',def_query+" ")+re.sub(r'^[\s]{0,99}(?=\S)','',tag_string)+" ")
+    query = re.sub(r'([\s]+$)|(,[\s]+$)',"",re.sub(r'[\s]+$',', ',def_query+" ")+re.sub(r'^[\s]{0,99}(?=\S)','',tag_string)+" ")
 
     # add min and max score
     if min_score != ():
