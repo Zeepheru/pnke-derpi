@@ -197,9 +197,6 @@ def updateSet(dataset_name="mane6-6000"):
         download_images=False
     )
 
-
-
-
 def hybrid():
     """
     6k boi

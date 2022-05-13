@@ -618,9 +618,6 @@ class derpi():
         # print(len(list_of_images))
 
         return list_of_images
-
-    
-
 ####
 
 def createDerpiSearchQuery(def_query="solo, pony, !animated, !human, !webm, !gif, !eqg, !comic, !meme, created_at.lte:3 days ago", 
