@@ -328,14 +328,61 @@ class imgDownloader():
 
         return True
 
-    def quarantine(self, tags=[], src="", dst=""):
+    def quarantine(self, no_tags=[], src="", dst=""):
         """
         Function to basically batch move a bunch of files out of certain directories.
-        This was an issue after I realised I'd turned off the 
+        This was an issue after I realised I'd turned off the explicit filter
+        
+        checks images in src and moves the specified ones to dst.
 
         might also have mmmgs use idk :)
         """
-        self.rel_path
+   
+        if os.path.exists(os.path.join(self.rel_path, src)):
+            src = os.path.join(self.rel_path, src)
+        elif os.path.exists(src):
+            pass
+        else:
+            print(f"Source path {src} does not exist.)
+            return
+                  
+        if re.search(r'.:\\', dst) != None:
+            if not os.path.exists(dst):
+                  create
+        else:
+            dst = os.path.join(self.rel_path, dst)
+            if not 
+        
+        # new system for keeping track of filenames
+        img_filenames = {}
+        for f in os.lisdir(src)
+            img_filenames[re.sub(r'\..+$', '', a)] = f
+            # so the ids correspond to the filenames, I'm doing the regex recursively anyway
+        idlist = list(img_filenames)
+        if idlist == []:
+            print("No images.")
+            return
+                  
+        move_list = {}
+        # images to move
+                  
+        derp = derpi()
+        for id in idlist:
+            img = derp.getImageInfo(id)
+            if any(a in tags for a in no_tags):
+                  move_list[id] = img
+            
+            ## Debug
+            break
+        print(f"{len(list(move_list))} images found with the tag(s) {no_tags}.")
+        
+        # Move
+        for id in list(move_list)
+            img_src = os.path.join(src, img_filenames)
+            img_dst = os.path.join(dst, img_filenames)
+            print(f"Moving {img_src} to {img_dst}")
+            shutil.move(img_src, img_dst)
+            
 
 
 class derpi():
