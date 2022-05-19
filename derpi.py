@@ -195,6 +195,11 @@ class imgDownloader():
 
         df = pd.read_csv(filepath)
         return df['id'].tolist()
+    
+    def exportDfToCSV(self, df, filepath):
+        "LOL. "
+        print("Writing csv file to {}.csv".format(filepath))
+        df.to_csv(os.path.join(self.def_path, filepath + ".csv"), index = False, header=True)
 
     def loadFromCSV(self, filepath, return_type="dict"):
         """
@@ -205,18 +210,28 @@ class imgDownloader():
         but I'm lazy and can't be arsed, so have fun with slower running code (as if calling the api is _blazing fast_)
         """
         filepath = re.sub(r'\.csv\.csv$', r'\.csv', filepath) #idiot(me)-proofing
-        filepath = os.path.join(self.def_path, filepath)
+        filepath_full = os.path.join(self.def_path, filepath)
 
-        if not os.path.exists(filepath) or not filepath.endswith(".csv"):
-            print("{filepath} - Not a CSV File / Doesn't exist.")
+        if not filepath_full.endswith(".csv"):
+            print("{filepath_full} - Not a CSV File.")
             return
+        elif not os.path.exists(filepath_full):
+            repath = filepath_full.replace('.csv', r'\\') + filepath
+            if os.path.exists(repath):
+                filepath_full = repath
+            else:
+                print("{filepath} - Does not exist.")
+                return
 
-        df = pd.read_csv(filepath)
+        del filepath
+
+        df = pd.read_csv(filepath_full)
         df.rename(columns = {'tag':'desired_tags'}, inplace = True) #me dum dum
         df.rename(columns = {'tags':'desired_tags'}, inplace = True) # also / in case lol
 
+
         # ah yes
-        df["desired_tags"] = df["desired_tags"].apply(lambda x: re.findall(r'(?!,).+?(?=,)', x))
+        df["desired_tags"] = df["desired_tags"].apply(lambda x: re.findall(r'(?!,).+?(?=,|$)', x))
         
 
         if return_type == "dict":
@@ -247,22 +262,15 @@ class imgDownloader():
         """
 
         ## setting up local folders.
-        download_folder = os.path.join(self.def_path, dir_path)
+        download_folder = os.path.join(self.def_path, f"{dir_path}\\images") # IMAGES ONLY
         if start_empty:
             #yeahhh boi
             if os.path.exists(download_folder):
                 shutil.rmtree(download_folder)
 
         if not os.path.exists(download_folder):
-            createallfolders(download_folder)
+            createallfolders(f"{download_folder}")
         ## 
-
-    
-        if not force_redownload:
-            ids_not_needed = [id for id in list(dl_list) if id in self.getImagesPresent()]
-        else:
-            ids_not_needed = []
-
 
         ## convertiong to a df if needed
         dl_list_dict = {}
@@ -273,32 +281,44 @@ class imgDownloader():
 
             taglist_str = []
             for id in list(dl_list):
+                # not needed
                 taglist_str.append(','.join(tag for tag in dl_list[id]["desired_tags"]))
             # basically ['tag,tag,tag,tag,...', 'tag,tag']
 
             data = {'id': list(dl_list),
-                    'tag': taglist_str, 
+                    'tags': [dl_list[id]["desired_tags"] for id in list(dl_list)], 
                     'src': [dl_list[id]["src"] for id in list(dl_list)],
                     'fname': [dl_list[id]["fname"] for id in list(dl_list)],
                     'format': [dl_list[id]["format"] for id in list(dl_list)] 
                     }
 
-            dl_list = pd.DataFrame(data, columns=['id', 'tag', 'src', 'fname', 'format'])
+            dl_list = pd.DataFrame(data, columns=['id', 'tags', 'src', 'fname', 'format'])
 
             if new_format != "":
                 # I think this works
                 ## this basically changes the fnames in the df to new fnames
                 dl_list["fname"] = dl_list["fname"].apply(lambda x: re.sub(r'(?<=\.)[a-zA-Z0-9]+$', f'{new_format}', x))
+        else:
+            # stupid renames
+            dl_list.rename(columns = {'desired_tags':'tags'}, inplace = True) #me dum dum
                 
+        
+        df_ids = dl_list["id"].tolist()
+        imgs_present = self.getImagesPresent()
+        if not force_redownload:
+            ids_not_needed = [a for a in df_ids if a in imgs_present]
+        else:
+            ids_not_needed = []
+        del df_ids, imgs_present
+
         # creates the new df based on what's not in ids_not_needed
         new_dl_list = dl_list.loc[~dl_list["id"].isin(ids_not_needed)]
-        
+
         ## csv/json first
         if export_csv:
             # TODO no functions yet, code is here until needed
             # also yes, still the main directory
-            print("Writing csv file to {}.csv".format(dir_path))
-            dl_list.to_csv(os.path.join(self.def_path, dir_path + ".csv"), index = False, header=True)
+            self.exportDfToCSV(df=dl_list, filepath=f"{dir_path}\\{dir_path}")
 
         elif export_json:
             ### currently deprecated TODO
@@ -328,7 +348,7 @@ class imgDownloader():
             for id in dl_list["id"].tolist():
                 try:
                     src = os.path.join(self.def_path, "derpi-imgs", str(id)+"."+dl_list.loc[dl_list["id"] == id]["format"].item())
-                    dst = os.path.join(self.def_path, dir_path, str(id)+"."+dl_list.loc[dl_list["id"] == id]["format"].item())
+                    dst = os.path.join(self.def_path, dir_path, "images", str(id)+"."+dl_list.loc[dl_list["id"] == id]["format"].item())
                     print("Copying {} to {}".format(src, dst))
 
                     shutil.copy(src, dst)
@@ -336,7 +356,7 @@ class imgDownloader():
                     print(e)
                     # This means the OG file is a jpg beacuse I fucked some stuff up
                     src = os.path.join(self.def_path, "derpi-imgs", str(id)+"."+"jpg")
-                    dst = os.path.join(self.def_path, dir_path, str(id)+"."+"jpg")
+                    dst = os.path.join(self.def_path, dir_path, "images", str(id)+"."+"jpg")
                     print("Copying {} to {}".format(src, dst))
 
                     shutil.copy(src, dst)
@@ -365,6 +385,8 @@ class imgDownloader():
         checks images in src and moves the specified ones to dst.
 
         might also have mmmgs use idk :)
+
+        TODO TODO need to add /images for the newer datasets
         """
    
         src = os.path.join(self.def_path, src) # only def_path works btw

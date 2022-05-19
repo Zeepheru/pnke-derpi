@@ -342,9 +342,11 @@ def getSpecificNumber():
         export_csv=True
     )
 
-def csvCloppity(dataset_name="", score = (100, 1000), desired_tags=[], max_images=0):
+def csvCloppity(dataset_name="", score = (100, 1000), desired_tags=[], max_images=0, load_backup=True):
     """
     The most well-written function for dataset creation, use this as a template
+
+    Backup is in the form of a json because I can't be arsed to write conversion code
     """
     if dataset_name == "": 
         print("Dataset name is empty. Exiting")
@@ -356,7 +358,6 @@ def csvCloppity(dataset_name="", score = (100, 1000), desired_tags=[], max_image
     ## basic init for stuffffs
     derp = derpi()
     dl = imgDownloader()
-    dl_list = {}
 
     # no pony qury as loading from local csv's for this
     csv_files_to_load = [
@@ -372,24 +373,48 @@ def csvCloppity(dataset_name="", score = (100, 1000), desired_tags=[], max_image
     ##
 
     print(f"Length of Ids: {len(ids)}")
+    if max_images == 0:
+        max_images = len(ids)
+
+    imgs_api_not_needed = [] # images already in backup 
+    dl_list = {}
+    if load_backup:
+        try:
+            dl_list = dl.loadFromCSV(filepath="backup.csv", return_type="dict")
+            imgs_api_not_needed = list(dl_list)
+            print("INFO - Successfully loaded from backup.json")
+        except:
+            pass # just pass
 
     for i, id in enumerate(ids):
-        if i == max_images and max_images != 0:
+        if i == max_images:
             # more than the max images
             break
-
-        print(f'Obtaining info for {id} from Derpi [{i+1}/{min(len(list(ids)), max_images)}].')
-        r = derp.getImageInfo(id) # get INFO
-        if r == None: 
-            # for shit
+        elif id in imgs_api_not_needed:
+            print(f'{id} Loaded from backup [{i+1}/{min(len(list(ids)), max_images)}].')
             continue
+        
+        try:
+            print(f'Obtaining info for {id} from Derpi [{i+1}/{min(len(list(ids)), max_images)}].')
+            r = derp.getImageInfo(id) # get INFO
+            if r == None: 
+                # for shit
+                continue
 
-        dl_list[id] = { 
-            "src":r["src"],
-            "fname":r["fname"],
-            "desired_tags":[tag for tag in r["tags"] if tag in desired_tags], # ja
-            "format":r["format"]
-            }
+            dl_list[id] = { 
+                "src":r["src"],
+                "fname":r["fname"],
+                "desired_tags":[tag for tag in r["tags"] if tag in desired_tags], # ja
+                "format":r["format"]
+                }
+
+        except Exception as e:
+            # likely some form of network error
+            print(e)
+            # export the backup json
+            print(f"INFO - dl_list creation exited. Creating backup.json at {dl.def_path}")
+            dl.writeJson(dl_list, os.path.join(dl.def_path, "backup.json"))
+            return False
 
     del r # hmm
 
@@ -403,15 +428,59 @@ def csvCloppity(dataset_name="", score = (100, 1000), desired_tags=[], max_image
         download_images=False
     ) 
 
+def modifyCloppity(dataset_name="", score = (100, 1000), desired_tags=[], max_images=0, load_backup=True):
+    """
+    https://towardsdatascience.com/dealing-with-list-values-in-pandas-dataframes-a177e534f173
+    """
+    if dataset_name == "": 
+        print("Dataset name is empty. Exiting")
+        return False
+    elif desired_tags == [] or type(desired_tags).__name__ != 'list':
+        print("Desired tags is empty or not a list. Exiting")
+        return False
+
+    ## basic init for stuffffs
+    derp = derpi()
+    dl = imgDownloader()
+
+    df = dl.loadFromCSV(filepath="milk-naught.csv", return_type="df")
+    
+    ### 
+    df = df.sample(frac=1) # SHUFFLE
+
+    ## current super crummy method of JUST CONVERT TO STRINGS
+    df["desired_tags"] = df["desired_tags"].apply(lambda x:str(x)) 
+    df["desired_tags"] = df["desired_tags"].apply(lambda x:re.sub(r"'|\[|\]", '', x))
+    ##
+    
+    ## gets 950 of both explicit and safe
+    df_safe = df.loc[df["desired_tags"] == "safe"].head(950)
+    df_explicit = df.loc[df["desired_tags"] == "explicit"].head(950)
+    # print(type(df.loc[df["id"] == 2512202]["tags"].item()))
+    # print(df.loc[df["id"] == 2512202]["tags"].item())
+    # print(df_safe.head)
+    # print(df_explicit.head)
+
+    dl.fullDownload(
+        dl_list=pd.concat([df_safe, df_explicit]),
+        dir_path=dataset_name,
+        start_empty=True,
+        new_format="jpg",
+        new_size=(400,400), 
+        export_csv=True,
+        download_images=True
+    ) 
 
 ######
 def main():
-    modfiyCloppity(
-        dataset_name="milk-alpha",
+    modifyCloppity(
+        dataset_name="milk-beta",
         desired_tags=["safe", "suggestive", "questionable", "explicit", "grimdark", "semi-grimdark"],
         score=(100, 1000), # not needed but anyway
-        max_images=0 # no DEBUG
+        max_images=0, # no DEBUG
+        load_backup=False
     )
+
 
 def lull():
     dl = imgDownloader()
