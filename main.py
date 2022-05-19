@@ -96,6 +96,9 @@ def mane6_3000():
         
         for id in imgList:
             r = derp.getImageInfo(id)
+            if r == None:
+                continue
+
             dl_list[id] = {
                 "src":r["src"],
                 "desired_tags":[tag for tag in r["tags"] if tag in mane6],
@@ -154,6 +157,9 @@ def mane6TestSet():
         
         for id in imgList:
             r = derp.getImageInfo(id)
+            if r == None:
+                continue
+
             dl_list[id] = {
                 "dl":r["dl"],
                 "desired_tags":[tag for tag in r["tags"] if tag in mane6],
@@ -180,6 +186,9 @@ def updateSet(dataset_name="mane6-6000"):
 
         print(f'Obtaining info for {id} from Derpi [{i+1}/{len(list(ids))}].')
         r = derp.getImageInfo(id)
+        if r == None:
+            continue
+
         dl_list[id] = { ## THIS WHOLE SECTION SHOULD JUST BE LOADED FROM the CSV; also hybrid csv+api datasets
             "src":r["src"],
             "fname":r["fname"],
@@ -239,6 +248,9 @@ def hybrid():
                     print(f'Obtaining {id} from Derpi [{i+1}/{len(list(imgList))}].')
 
                 r = derp.getImageInfo(id)
+                if r == None:
+                    continue
+                
                 dl_list[id] = {
                     "src":r["src"],
                     "desired_tags":[tag for tag in r["tags"] if tag in mane6],
@@ -264,30 +276,6 @@ def hybrid():
         start_empty=False,
         new_format="jpg",
         new_size=(400,400)
-    )
-
-def derpLoadFromCSV():
-    """
-    just from the CSV
-    Just add extra files lol
-    """
-    derp = derpi()
-    dl = imgDownloader()
-    dl_list = {}
-    dataset_name = "mane6-8000"
-    
-    print("Loading CSV")
-    dl_list = dl.loadFromCSV(filepath="mane6-6000.csv")
-    dl_list += dl.loadFromCSV(filepath="mane6-3000-v2.csv")
-
-    print("Starting DL Procedure.")
-    dl.fullDownload(
-        dl_list=dl_list,
-        dir_path=dataset_name,
-        start_empty=True,
-        new_format="jpg",
-        new_size=(400,400),
-        export_csv=True
     )
 
 def getSpecificNumber():
@@ -333,6 +321,9 @@ def getSpecificNumber():
                 print(f'Obtaining {id} from Derpi [{n+1}/{desired_no_per_char}].')
 
             r = derp.getImageInfo(id)
+            if r == None:
+                continue
+            
             dl_list[id] = {
                 "src":r["src"],
                 "desired_tags":[tag for tag in r["tags"] if tag in mane6],
@@ -351,10 +342,76 @@ def getSpecificNumber():
         export_csv=True
     )
 
+def csvCloppity(dataset_name="", score = (100, 1000), desired_tags=[], max_images=0):
+    """
+    The most well-written function for dataset creation, use this as a template
+    """
+    if dataset_name == "": 
+        print("Dataset name is empty. Exiting")
+        return False
+    elif desired_tags == [] or type(desired_tags).__name__ != 'list':
+        print("Desired tags is empty or not a list. Exiting")
+        return False
+
+    ## basic init for stuffffs
+    derp = derpi()
+    dl = imgDownloader()
+    dl_list = {}
+
+    # no pony qury as loading from local csv's for this
+    csv_files_to_load = [
+        "mane6-6000.csv",
+        "mane6-3000-v2.csv"
+    ]
+
+    # no dedicated test set yet
+    ## creating the ids list 
+    ids = []
+    for f in csv_files_to_load:
+        ids += dl.loadFromCSV(filepath=f, return_type="df")["id"].tolist()
+    ##
+
+    print(f"Length of Ids: {len(ids)}")
+
+    for i, id in enumerate(ids):
+        if i == max_images and max_images != 0:
+            # more than the max images
+            break
+
+        print(f'Obtaining info for {id} from Derpi [{i+1}/{min(len(list(ids)), max_images)}].')
+        r = derp.getImageInfo(id) # get INFO
+        if r == None: 
+            # for shit
+            continue
+
+        dl_list[id] = { 
+            "src":r["src"],
+            "fname":r["fname"],
+            "desired_tags":[tag for tag in r["tags"] if tag in desired_tags], # ja
+            "format":r["format"]
+            }
+
+    del r # hmm
+
+    dl.fullDownload(
+        dl_list=dl_list,
+        dir_path=dataset_name,
+        start_empty=True,
+        new_format="jpg",
+        new_size=(400,400), # keeping it at 400 for now, details amirite
+        export_csv=True,
+        download_images=False
+    ) 
+
+
 ######
 def main():
-    updateSet(dataset_name="mane6-3000-v2")
-    derpLoadFromCSV()
+    modfiyCloppity(
+        dataset_name="milk-alpha",
+        desired_tags=["safe", "suggestive", "questionable", "explicit", "grimdark", "semi-grimdark"],
+        score=(100, 1000), # not needed but anyway
+        max_images=0 # no DEBUG
+    )
 
 def lull():
     dl = imgDownloader()

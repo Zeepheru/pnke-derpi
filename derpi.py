@@ -5,15 +5,13 @@ import json
 import urllib
 import time
 import pandas as pd
-from scipy import rand
-from sympy import true
 from tqdm import tqdm
 import shutil
 
 from PIL import Image
 
 
-Image.MAX_IMAGE_PIXELS = None # disabling the protecting lol
+Image.MAX_IMAGE_PIXELS = None # disabling the protections lol
 
 """
 This is mostly draft, temporary (BWAHAHA) code.
@@ -69,7 +67,6 @@ def createallfolders(f_path):
 
 class imgDownloader():
     """
-    JUST GRAB MAH YOUTUBE CODE
     """
     def __init__(self) -> None:
         """
@@ -217,8 +214,10 @@ class imgDownloader():
         df = pd.read_csv(filepath)
         df.rename(columns = {'tag':'desired_tags'}, inplace = True) #me dum dum
         df.rename(columns = {'tags':'desired_tags'}, inplace = True) # also / in case lol
-        df["desired_tags"] = df["desired_tags"].apply(lambda x: [x]) # changes it to a list, because that's how my data treats it
-        # I should probably change this out
+
+        # ah yes
+        df["desired_tags"] = df["desired_tags"].apply(lambda x: re.findall(r'(?!,).+?(?=,)', x))
+        
 
         if return_type == "dict":
             return df.set_index('id').T.to_dict()
@@ -243,8 +242,11 @@ class imgDownloader():
 
         dir_path likely will apply  to both the folder and the 
         if empty string then ideally use datetime (TODO)
+
+        dl_list should be a df but dict is still supported
         """
 
+        ## setting up local folders.
         download_folder = os.path.join(self.def_path, dir_path)
         if start_empty:
             #yeahhh boi
@@ -253,6 +255,7 @@ class imgDownloader():
 
         if not os.path.exists(download_folder):
             createallfolders(download_folder)
+        ## 
 
     
         if not force_redownload:
@@ -260,38 +263,49 @@ class imgDownloader():
         else:
             ids_not_needed = []
 
-        new_dl_list = {}
-        for id in list(dl_list):
-            # I KNOW there's a more pythonic way, shut up    
-            if id not in ids_not_needed:
-                new_dl_list[id] = dl_list[id]
-                
-        ## csv/json first
-        if export_csv:
-            # TODO no functions yet, code is here until needed
-            # also yes, still the main directory
+
+        ## convertiong to a df if needed
+        dl_list_dict = {}
+        if type(dl_list).__name__ == "dict":
+            print("INFO: dl_list is a dictionary. Recommended to use Pandas Dataframes.") # TODO lmao I need to log
+
+            dl_list_dict = dict(dl_list_dict) # for purposes.
+
+            taglist_str = []
+            for id in list(dl_list):
+                taglist_str.append(','.join(tag for tag in dl_list[id]["desired_tags"]))
+            # basically ['tag,tag,tag,tag,...', 'tag,tag']
 
             data = {'id': list(dl_list),
-                    'tag': [dl_list[id]["desired_tags"][0] for id in list(dl_list)], # note taking the first elem of the desired tags (USUALLY one anyway)
+                    'tag': taglist_str, 
                     'src': [dl_list[id]["src"] for id in list(dl_list)],
                     'fname': [dl_list[id]["fname"] for id in list(dl_list)],
                     'format': [dl_list[id]["format"] for id in list(dl_list)] 
                     }
 
-            df = pd.DataFrame(data, columns=['id', 'tag', 'src', 'fname', 'format'])
+            dl_list = pd.DataFrame(data, columns=['id', 'tag', 'src', 'fname', 'format'])
 
             if new_format != "":
                 # I think this works
-
                 ## this basically changes the fnames in the df to new fnames
-                df["fname"] = df["fname"].apply(lambda x: re.sub(r'(?<=\.)[a-zA-Z0-9]+$', f'{new_format}', x))
-
+                dl_list["fname"] = dl_list["fname"].apply(lambda x: re.sub(r'(?<=\.)[a-zA-Z0-9]+$', f'{new_format}', x))
+                
+        # creates the new df based on what's not in ids_not_needed
+        new_dl_list = dl_list.loc[~dl_list["id"].isin(ids_not_needed)]
+        
+        ## csv/json first
+        if export_csv:
+            # TODO no functions yet, code is here until needed
+            # also yes, still the main directory
             print("Writing csv file to {}.csv".format(dir_path))
-            df.to_csv(os.path.join(self.def_path, dir_path + ".csv"), index = False, header=True)
+            dl_list.to_csv(os.path.join(self.def_path, dir_path + ".csv"), index = False, header=True)
 
         elif export_json:
+            ### currently deprecated TODO
+            print("WARNING: Exporting as a json is deprecated. Exiting.")
+            return False
             tags = {}
-            for id in list(dl_list):
+            for id in list(dl_list_dict): # if df it is not converted
                 tags[id] = dl_list[id]["desired_tags"]
 
             print("Writing json file to {}.json".format(dir_path))
@@ -299,26 +313,27 @@ class imgDownloader():
 
         ## then images
         if download_images:
-
-            for n, id in enumerate(list(new_dl_list)):
-                print("({}/{}) - {}%".format(n+1, len(list(new_dl_list)), (n+1)/len(list(new_dl_list))*100)) # the math lol
+            total = len(new_dl_list)
+            for n, id in enumerate(new_dl_list["id"].tolist()):
+                print("({}/{}) - {}%".format(n+1, total, (n+1)/total*100)) # the math lol
 
                 # downloading first
                 self.downloadFile(
-                    new_dl_list[id]["src"],
+                    new_dl_list.loc[new_dl_list["id"] == id]["src"].item(),
                     os.path.join(self.def_path, "derpi-imgs", 
-                    new_dl_list[id]["fname"])
+                    new_dl_list.loc[new_dl_list["id"] == id]["fname"].item())
                 )
             
             print("Copying Files.")
-            for id in list(dl_list):
+            for id in dl_list["id"].tolist():
                 try:
-                    src = os.path.join(self.def_path, "derpi-imgs", str(id)+"."+dl_list[id]["format"])
-                    dst = os.path.join(self.def_path, dir_path, str(id)+"."+dl_list[id]["format"])
+                    src = os.path.join(self.def_path, "derpi-imgs", str(id)+"."+dl_list.loc[dl_list["id"] == id]["format"].item())
+                    dst = os.path.join(self.def_path, dir_path, str(id)+"."+dl_list.loc[dl_list["id"] == id]["format"].item())
                     print("Copying {} to {}".format(src, dst))
 
                     shutil.copy(src, dst)
-                except:
+                except Exception as e:
+                    print(e)
                     # This means the OG file is a jpg beacuse I fucked some stuff up
                     src = os.path.join(self.def_path, "derpi-imgs", str(id)+"."+"jpg")
                     dst = os.path.join(self.def_path, dir_path, str(id)+"."+"jpg")
@@ -328,7 +343,7 @@ class imgDownloader():
 
 
         ## resizing crap
-        image_files = os.listdir(download_folder)
+        image_files = os.listdir(download_folder) # perform image functions on the export folder.
         for i, f in enumerate(image_files):
             print(f"Performing image functions on {f} [{i+1}/{len(image_files)}]")
 
@@ -492,10 +507,14 @@ class derpi():
             printJson=False
         )
 
-        
-        r_dict = r_json["image"]
-        r_dict["src"] = r_json["image"]["representations"]["full"]
-        r_dict["fname"] = str(id) + "." + r_dict["format"] 
+        try:
+            r_dict = r_json["image"]
+            r_dict["src"] = r_json["image"]["representations"]["full"]
+            r_dict["fname"] = str(id) + "." + r_dict["format"] 
+        except:
+            print("Image {id} has the wrong json keys - likely means the image id is valid but not available, eg duplicates")
+            # Generally, if r is none the other places should not take the image
+            return None
 
         return r_dict
 
