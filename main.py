@@ -20,51 +20,6 @@ def randomFun():
     for imgId in imgList:
         print(derp.findThatFileName(imgId))
 
-def rdpp():
-    """
-    Test only. 
-    To get 20 ponks images and 20 rd images
-    """
-    s_query_rd = createDerpiSearchQuery(min_score=200, max_score=750, yes_tags=["rd"], no_tags=["pp","ts","fs"], tag_string="!clothes")
-    s_query_pp = createDerpiSearchQuery(min_score=200, max_score=750, yes_tags=["pp"], no_tags=["rd","ts","fs"], tag_string="!clothes")
-    desired_tags = ["rainbow dash", "pinkie pie"]
-
-    derp = derpi()
-
-    # rd
-    rd_imgList = derp.imageSearch(q=s_query_rd, sf="score", n_get=125)
-    dl_list = {}
-    for id in rd_imgList:
-        r = derp.getImageInfo(id)
-        dl_list[id] = {
-            "src":r["src"],
-            "desired_tags":[tag for tag in r["tags"] if tag in desired_tags],
-            "format":r["format"]
-        }
-
-    # pp
-    pp_imgList = derp.imageSearch(q=s_query_pp, sf="score", n_get=125)
-    for id in pp_imgList:
-        r = derp.getImageInfo(id)
-        if id in list(dl_list):
-            print("UHHHHHHHHHHHH" + str(id))
-
-        dl_list[id] = {
-            "src":r["src"],
-            "desired_tags":[tag for tag in r["tags"] if tag in desired_tags],
-            "format":r["format"]
-        }
-
-    # after combining, 
-    dl = imgDownloader()
-    dl.fullDownload(
-        dl_list=dl_list,
-        dir_path="test-1-cropped",
-        start_empty=True,
-        new_format="jpg",
-        new_size=(400,400)
-    )
-
 def mane6_3000():
     """
     Create the mane6-3000 dataset
@@ -279,13 +234,16 @@ def hybrid():
     )
 
 def getSpecificNumber():
-    # for a 120-ish img testset
-    # 20 per char + testSetA
+    """
+    Generally used to create test sets while checking if the image is in another dataset
+    to reach a certain number of images.
+
+    (NOT UPDATED TO THE BETTER TEMPLATE)
+    """
 
     derp = derpi()
     dl = imgDownloader()
-    dl_list = {}
-    dataset_name = "mane6-testset-b-rs400"
+    dataset_name = "milk-test-alpha"
 
     general_tag_string = "!clothes"
     min_score = 100
@@ -294,15 +252,17 @@ def getSpecificNumber():
         "g5"
     ]
 
-    dl_list = dl.loadFromCSV(filepath="mane6-testset-a-rs400.csv")
-    no_ids = dl.loadFromCSV(filepath="mane6-6000.csv", return_type="df")["id"].tolist() # already in m6-6000
-    desired_no_per_char = 20
+    # dl_list = dl.loadFromCSV(filepath="mane6-testset-a-rs400.csv")
+    dl_list = {}
+    no_ids = dl.loadFromCSV(filepath="milk-beta.csv", return_type="df")["id"].tolist() # already in m6-6000
+    desired_no_per_char = 10 # each
 
     for pony in mane6:
         print("\nQuerying for tag: `{}`".format(pony))
 
         pony_query = createDerpiSearchQuery(min_score=min_score, max_score=max_score, 
-            yes_tags=[pony], no_tags=[horse for horse in mane6 if horse != pony] + extra_no_tags, tag_string=general_tag_string)
+            yes_tags=[pony] + ["explicit"], no_tags=[horse for horse in mane6 if horse != pony] + extra_no_tags, 
+            tag_string=general_tag_string, sfw=False)
 
         imgList = derp.imageSearch(q=pony_query, sf="random", n_get=50) # random now
         # I've not put in an actual method to do the numbers properly, so here's just 50 and I'll cut it down to 
@@ -326,12 +286,36 @@ def getSpecificNumber():
             
             dl_list[id] = {
                 "src":r["src"],
-                "desired_tags":[tag for tag in r["tags"] if tag in mane6],
+                "desired_tags":[tag for tag in r["tags"] if tag in ["safe", "explicit"]],
                 "format":r["format"],
                 "fname":r["fname"]
             }
 
             n += 1
+
+    ### loadsafeimages (from m6-3000-v2), just ids beacuse I dont want to deal with bugs
+    df = dl.loadFromCSV(filepath=f"mane6-3000-v2.csv", return_type="df")
+
+    df["desired_tags"] = df["desired_tags"].apply(lambda x:str(x))  # ashdjhsbvkjhszbcjhsbdfc
+    df["desired_tags"] = df["desired_tags"].apply(lambda x:re.sub(r"'|\[|\]", '', x))
+
+    for pony in mane6:
+        pony_df = df.loc[df["desired_tags"] == pony].head(desired_no_per_char)
+        for n, id in enumerate(pony_df['id'].tolist()):
+            # lmao
+
+            print(f'Obtaining {id} from Derpi [{n+1}/{desired_no_per_char}].')
+
+            r = derp.getImageInfo(id)
+            if r == None:
+                continue
+            
+            dl_list[id] = {
+                "src":r["src"],
+                "desired_tags":[tag for tag in r["tags"] if tag in ["safe", "explicit"]],
+                "format":r["format"],
+                "fname":r["fname"]
+            }
 
     dl.fullDownload(
         dl_list=dl_list,
@@ -481,11 +465,13 @@ def main():
         load_backup=False
     )
 
+def me_tired():
+    getSpecificNumber()
 
 def lull():
     dl = imgDownloader()
-    dl.quarantine(src="derpi-imgs",dst="temp-dir",no_tags=["explicit"])
+    dl.quarantine(src="derpi-imgs", dst="derpi-imgs-nsfw", no_tags=["explicit"], move_first=True)
     # it works, just remember to remove the break
 
 if __name__ == '__main__':
-    main()
+    lull()

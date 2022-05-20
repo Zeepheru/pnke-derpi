@@ -1,3 +1,4 @@
+from django.test import tag
 import requests
 import os
 import re
@@ -79,6 +80,10 @@ class imgDownloader():
         """
         self.rel_path = r"-data"
         self.def_path = os.path.join(os.getcwd(), self.rel_path)
+        self.local_img_src_paths = [
+            "derpi-imgs",
+            "derpi-imgs-nsfw"
+        ]
     
     def writeJson(self, data, filepath):
         if not filepath.endswith(".json"):
@@ -182,6 +187,31 @@ class imgDownloader():
 
         return True
 
+    def getTagsFrom(self, tag_output):
+        if type(tag_output).__name__ == "list":
+            return tag_output
+        elif type(tag_output).__name__ == "str":
+            if re.search(r'\[.\]', tag_output) != None:
+                # stoopid things
+                tag_output = re.sub(r"'|\[|\]", '', tag_output)
+                
+            return re.findall(r'(?!,).+?(?=,|$)', tag_output)
+
+    def getTagsFromDF(self, df, id=0):
+        """
+        Uses the inputs df and id to spit out a list of tags for the image
+        where df is using a somewhat standard format for dataframes
+
+        this function prefers the column to be "tags"
+
+        ahhaha the function above
+        """
+        df.rename(columns = {'desired_tags':'tags'}, inplace = True) 
+        df.rename(columns = {'tag':'tags'}, inplace = True) 
+
+        tag_output = df.loc[df["id"] == int(id)]["desired_tags"].item()
+        return self.getTagsFrom(tag_output)
+
     def loadFromCSVlegacy(self, filepath):
         """
         returns a list of ids, for now (may be configurable in the future idk lollll)
@@ -208,6 +238,10 @@ class imgDownloader():
 
         Note: I know I should really just make everything run on Pandas df's
         but I'm lazy and can't be arsed, so have fun with slower running code (as if calling the api is _blazing fast_)
+
+        NOTE NOTE NOTE
+        This code returns desired_tags as a LIST. If some if statement is required, check
+        main.py for the code to convert to strings and such
         """
         filepath = re.sub(r'\.csv\.csv$', r'\.csv', filepath) #idiot(me)-proofing
         filepath_full = os.path.join(self.def_path, filepath)
@@ -229,6 +263,8 @@ class imgDownloader():
         df.rename(columns = {'tag':'desired_tags'}, inplace = True) #me dum dum
         df.rename(columns = {'tags':'desired_tags'}, inplace = True) # also / in case lol
 
+        # df["desired_tags"] = df["desired_tags"].apply(lambda x:str(x)) 
+        # df["desired_tags"] = df["desired_tags"].apply(lambda x:re.sub(r"'|\[|\]", '', x))
 
         # ah yes
         df["desired_tags"] = df["desired_tags"].apply(lambda x: re.findall(r'(?!,).+?(?=,|$)', x))
@@ -333,6 +369,18 @@ class imgDownloader():
 
         ## then images
         if download_images:
+            ## setting up the nsfw-sfw divide
+            def evalSfw(row):
+                # True / False
+                tagList = self.getTagsFrom(row["tags"])
+                if "explicit" in tagList:
+                    return "derpi-imgs-nsfw"
+                else:
+                    return "derpi-imgs"
+                
+            # dl_list['nsfw'] = dl_list.apply(evalSfw)
+            dl_list['dl_folder'] = dl_list.apply(evalSfw) # only one purpose anyway
+
             total = len(new_dl_list)
             for n, id in enumerate(new_dl_list["id"].tolist()):
                 print("({}/{}) - {}%".format(n+1, total, (n+1)/total*100)) # the math lol
@@ -340,26 +388,42 @@ class imgDownloader():
                 # downloading first
                 self.downloadFile(
                     new_dl_list.loc[new_dl_list["id"] == id]["src"].item(),
-                    os.path.join(self.def_path, "derpi-imgs", 
+                    os.path.join(self.def_path, dl_list.loc[dl_list["id"] == id]['dl_folder'], 
                     new_dl_list.loc[new_dl_list["id"] == id]["fname"].item())
                 )
             
             print("Copying Files.")
+            """
+            New method of copying files that is a bit less clunky.
+            (taken from self.quarantine() )
+            A dict `img_filenames` is created by listdir the various source paths
+
+            img_filenames = {
+                id: full_path,
+                ...
+            }
+            """
+            img_filenames = {}
+            for source_path in self.local_img_src_paths:
+                full_src_path = os.path.join(self.def_path, source_path)
+
+                for f in os.listdir(full_src_path):
+                    img_filenames[int(re.sub(r'\..+$', '', f))] = os.path.join(self.def_path, f)
+            
             for id in dl_list["id"].tolist():
                 try:
-                    src = os.path.join(self.def_path, "derpi-imgs", str(id)+"."+dl_list.loc[dl_list["id"] == id]["format"].item())
-                    dst = os.path.join(self.def_path, dir_path, "images", str(id)+"."+dl_list.loc[dl_list["id"] == id]["format"].item())
+                    src = img_filenames[id]
+                    dst = os.path.join(
+                        self.def_path, dir_path, 
+                        "images", 
+                        str(id)+"."+dl_list.loc[dl_list["id"] == id]["format"].item())
+
                     print("Copying {} to {}".format(src, dst))
 
                     shutil.copy(src, dst)
                 except Exception as e:
                     print(e)
-                    # This means the OG file is a jpg beacuse I fucked some stuff up
-                    src = os.path.join(self.def_path, "derpi-imgs", str(id)+"."+"jpg")
-                    dst = os.path.join(self.def_path, dir_path, "images", str(id)+"."+"jpg")
-                    print("Copying {} to {}".format(src, dst))
-
-                    shutil.copy(src, dst)
+                    # lol
 
 
         ## resizing crap
@@ -375,7 +439,7 @@ class imgDownloader():
 
         return True
 
-    def quarantine(self, no_tags=[], src="", dst=""):
+    def quarantine(self, no_tags=[], src="", dst="", move_first=True):
         """
         !! PATHS ARE TENTATIVELY RELATIVE WITHIN THE -data folder. !!!
 
@@ -385,6 +449,7 @@ class imgDownloader():
         checks images in src and moves the specified ones to dst.
 
         might also have mmmgs use idk :)
+        - move_first just means it checks each image and moves without creating some intermediary.
 
         TODO TODO need to add /images for the newer datasets
         """
@@ -422,11 +487,23 @@ class imgDownloader():
             print(f'Obtaining info for {id} from Derpi [{i+1}/{len(idlist)}].')
 
             img = derp.getImageInfo(id)
-            if any(a in img["tags"] for a in no_tags):
-                  move_list[id] = img
-                  break
-                  ## Debug
-            
+            try:
+                if any(a in img["tags"] for a in no_tags):
+                    if not move_first:
+                        move_list[id] = img
+
+                    else:
+                        img_src = os.path.join(src, img_filenames[id])
+                        img_dst = os.path.join(dst, img_filenames[id])
+                        print(f"Moving {img_src} to {img_dst}")
+                        shutil.move(img_src, img_dst)
+            except:
+                pass
+                # the duplicate image error that isn't really dealt with by this code.
+
+        if move_first:
+            # no need to do anyth else.
+            return
             
         print(f"{len(list(move_list))} images found with the tag(s) {no_tags}.")
         
@@ -534,7 +611,7 @@ class derpi():
             r_dict["src"] = r_json["image"]["representations"]["full"]
             r_dict["fname"] = str(id) + "." + r_dict["format"] 
         except:
-            print("Image {id} has the wrong json keys - likely means the image id is valid but not available, eg duplicates")
+            print(f"Image {id} has the wrong json keys - likely means the image id is valid but not available, eg duplicates")
             # Generally, if r is none the other places should not take the image
             return None
 
