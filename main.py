@@ -1,7 +1,9 @@
-from sympy import N
+from imgDl import *
 from derpi import *
 
-global mane6, v
+
+## these
+global mane6, v, derp
 v = True
 mane6 = [
         "twilight sparkle",
@@ -11,10 +13,12 @@ mane6 = [
         "pinkie pie", 
         "rarity"
     ] # /)
+derp = derpi(local_sql_db=True, prefer_local=True)
+####
 
 
 def randomFun():
-    derp = derpi()
+    
 
     imgList = derp.imageSearch(q="artist:marsminer, explicit, score.gte:100", sf="score", n_get=100)
     for imgId in imgList:
@@ -38,7 +42,7 @@ def mane6_3000():
     images_per_char = 500 # total of 3000
 
     ##
-    derp = derpi()
+    
 
     dl_list = {}
     for pony in mane6:
@@ -89,8 +93,6 @@ def mane6TestSet():
         "g5"
     ]
 
-    ##
-    derp = derpi()
 
     dl_list = {}
     for pony in mane6:
@@ -130,7 +132,7 @@ def mane6TestSet():
     )
 
 def updateSet(dataset_name="mane6-6000"):
-    derp = derpi()
+    
     dl = imgDownloader()
     dl_list = {}
 
@@ -167,7 +169,7 @@ def hybrid():
     this is a hybrid loading scheme, with both API calls and 
     loading the csv for mane6-3000-v2
     """
-    derp = derpi()
+    
     dl = imgDownloader()
     dl_list = {}
     dataset_name = "mane6-6000"
@@ -241,7 +243,7 @@ def getSpecificNumber():
     (NOT UPDATED TO THE BETTER TEMPLATE)
     """
 
-    derp = derpi()
+    
     dl = imgDownloader()
     dataset_name = "milk-test-alpha"
 
@@ -340,7 +342,7 @@ def csvCloppity(dataset_name="", score = (100, 1000), desired_tags=[], max_image
         return False
 
     ## basic init for stuffffs
-    derp = derpi()
+    
     dl = imgDownloader()
 
     # no pony qury as loading from local csv's for this
@@ -424,7 +426,7 @@ def modifyCloppity(dataset_name="", score = (100, 1000), desired_tags=[], max_im
         return False
 
     ## basic init for stuffffs
-    derp = derpi()
+    
     dl = imgDownloader()
 
     df = dl.loadFromCSV(filepath="milk-naught.csv", return_type="df")
