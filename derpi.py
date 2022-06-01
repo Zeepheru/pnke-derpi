@@ -103,7 +103,7 @@ class derpi():
 
         return r_json["image"]["name"]
     
-    def getImageInfo(self, id, overwrite_local=False):
+    def getImageInfo(self, id, overwrite_local=False, tag_info=True):
         """
         inputs id
         returns r_json["image"] as a dict
@@ -113,6 +113,8 @@ class derpi():
             src, fname, format, tags
         
         overwrite_local is whether to call the api regardless and overwrite the local entries
+
+        tag_info allows it to query all the tags, adding a new key tag_info as a list of said tag responses
         """
 
         try:
@@ -143,6 +145,13 @@ class derpi():
                 )
             # print("Posting: "+url) # commented out for now.
             r_dict = self.get(url=url, printJson=False)["image"]
+
+            ## tags
+            if tag_info:
+                r_dict["tag_info"] = []
+                print("Tag querying. May take even more time.")
+                for tag_name in r_dict["tags"]:
+                    r_dict["tag_info"].append(self.tagSearch(tag_name))
 
             if self.local_sql:
                 # give the db the r_dict
@@ -238,6 +247,8 @@ class derpi():
 
         ------
         # just saying, the order _might_ be screwed, somehow.
+
+        
         """
         api_path = r'/api/v1/json/search/images'
         n_iter = int((n_get - 1) / per_page)
@@ -277,6 +288,85 @@ class derpi():
         # print(len(list_of_images))
 
         return list_of_images
+
+    def tagSearch(self, tag_q):
+        """
+        Searches tag string.
+        No Ids because why I have no idea Derpibooru
+        """
+        # just a simple replace
+        tag_q = tag_q.replace(":", "-colon-") # for artist:
+
+        api_path = r'/api/v1/json/tags/:tag_id'
+        url = self.combineApiUrl(api_path, {"tag_id": urllib.parse.quote(str(tag_q).replace(" ", "+"))})
+        # print(url)
+        
+        r_json = self.get(url=url, printJson=False)
+        if not r_json:
+            print(f"Tag: {tag_q} not found.")
+
+        return r_json["tag"]
+
+    def commentIdSearch(self, comment_id):
+        """
+        Searches comment id
+        """
+        api_path = r'/api/v1/json/comments/:comment_id'
+        url = self.combineApiUrl(
+                api_path, {"comment_id":comment_id}
+            )
+
+        r_json = self.get(url=url, printJson=False)
+
+        return r_json["comment"]
+
+    def imgCommentSearch(self, img_id, remove_keys=True):
+        """
+        Searches img id for coments
+        comprehensive return dict (full info and stuff)
+
+        - remove keys removes the following keys:
+        ["created_at", "edit_reason", "edited_at", "updated_at"]
+
+        - if user_id is null, remove avatar (the link to the "background pony" pfp)
+        """
+        rmv_key_list = ["created_at", "edit_reason", "edited_at", "updated_at"]
+
+        print(f"Searching comments for image: {img_id}.")
+
+        api_path = r'/api/v1/json/search/comments'
+        cmts = []
+        pg = 0
+        while True:
+            url = self.combineApiUrl(
+                api_path, 
+                q_params={
+                    "q":urllib.parse.quote(f"image_id:{img_id}"),
+                    "filter_id":56027,
+                    "per_page":50,
+                    "page":pg+1
+                    }
+            )
+            r_json = self.get(url=url, printJson=False)
+            if r_json["comments"][0] in cmts:
+                break
+
+            cmts += r_json["comments"]
+
+            if len(r_json["comments"]) != 50:
+                break
+            pg += 1
+
+        for comment in cmts:
+            if remove_keys:
+                for key in rmv_key_list:
+                    comment.pop(key, None)
+
+            if comment["user_id"] == None:
+                comment["avatar"] = None
+
+        return cmts
+
 ####
 
 # other utils
@@ -320,8 +410,18 @@ def randomCode():
     print("Never Gonna Give You Up")
     
     derp = derpi()
-    data = derp.getImageInfo(2836500, overwrite_local=True)
+    data = derp.getImageInfo(2836500, overwrite_local=True, tag_info=True)
+    # print(dump_json(data))
+
+def commentCode():
+    thatMagnaImage = 1852446
+    multiPage = 1807714
+
+    derp = derpi()
+
+    data = derp.imgCommentSearch(1807714)
     print(dump_json(data))
+    print(len(data))
 
 if __name__ == "__main__":
     randomCode()

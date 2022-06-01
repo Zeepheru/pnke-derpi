@@ -93,8 +93,17 @@ class pgDerpi():
         - image_sha512_hash = sha512_hash
         - image_orig_sha512_hash = orig_sha512_hash
 
-        # New cols (moved from Derpi's public.image_sources)
-        - image.source
+        # New cols 
+        - image.source (moved from Derpi's public.image_sources)
+
+        # New tables
+        - artist (standalone)
+        - comments 
+
+        ## comments is fully standalone and isn't integrated with anything else 
+        aka the code to check images and stuff doesn't bother with comments, yet
+        it's there for MMMGS future use.
+        ## artists, also not used at the moment (can just take from tags WHERE category is origin)
         """
         self.table_info ={
             "images":[
@@ -132,7 +141,27 @@ class pgDerpi():
                 ('category', 'text'),
                 ('description', 'text'),
                 ('short_description', 'text')
+            ],
+            "artists":[
+                ('id', 'bigint'),
+                ('image_count', 'bigint'),
+                ('name', 'text'),
+                ('tag', 'text')
+            ],
+            "comments":[
+                ('id', 'bigint'),
+                ('image_id', 'bigint'),
+                ('author', 'text'),
+                ('avatar', 'text'),
+                ('body', 'text')
             ]
+        }
+        self.table_uniques = {
+            "images":['id'],
+            "image_taggings":[], 
+            "tags":['id','name'],
+            "artists":['id','name'],
+            "comments":['id']
         }
 
         # create 'CREATE' command
@@ -149,10 +178,13 @@ class pgDerpi():
             print(f"creating table: '{table_name}'")
             create_cmd = f"CREATE TABLE {table_name} (\n"
             create_cmd += ',\n'.join(str(a[0]) + ' ' + str(a[1]) for a in self.table_info[table_name])
+            if self.table_uniques[table_name] != []:
+                create_cmd += ',\nUNIQUE(' + ', '.join(str(a) for a in self.table_uniques[table_name]) + ")"
             create_cmds.append(create_cmd + "\n);")
 
         # print(create_cmds)
         for command in create_cmds:
+            # print(command)
             self.cur.execute(command)
 
         self.conn.commit()
@@ -193,7 +225,7 @@ class pgDerpi():
     ###
     def getId(self, img_id=0):
         """
-        check is just to only check that the id exists in images, returning a bool
+        ~check is just to only check that the id exists in images, returning a bool~
 
         input the imd_id, returns as a dict:
         - all cols in 'images'
@@ -226,7 +258,15 @@ class pgDerpi():
         r = self.cur.fetchall()
         return_data["tag_ids"] = [a[0] for a in r]
 
-        print(return_data)
+        # tag names
+        id_list_postgres = "(" + str(return_data["tag_ids"])[1:-1] + ")"
+        self.cur.execute(
+            f'\nSELECT name FROM tags WHERE id IN {id_list_postgres};'
+            )
+        r = self.cur.fetchall()
+        return_data["tags"] = [a[0] for a in r]
+
+        # print(return_data)
 
         return return_data
 
@@ -237,9 +277,12 @@ class pgDerpi():
 
         Assumes data is the output of derpi.getImageInfo()
         >> the dict - image:{} 
+
+        the proper upsert syntax is used later a bit (lol)
+        otherwise overwrite=True means to do so; False means ON CONFLCT DO NOTHING
         """
         #################### debug 
-        data = json.load(open('test-image-format.json'))["image"]
+        # data = json.load(open('test-image-format.json'))["image"]
         ##################
 
         cols = [col[0] for col in self.table_info["images"]]
@@ -272,13 +315,63 @@ class pgDerpi():
             self.cur.execute(f"DELETE FROM image_taggings WHERE image_id = {data['id']};")
 
         images_row = ', '.join(str(data[col]) for col in cols)
-        self.cur.execute(f"INSERT INTO images VALUES ({images_row})")
+        self.cur.execute(f"INSERT INTO images VALUES ({images_row}) ON CONFLICT DO NOTHING;")
 
         # img taggings
-        image_tagging_list_str = ','.join(f"({data['id']},{a})" for a in data["tag_ids"])
-        self.cur.execute(f"INSERT INTO image_taggings VALUES {image_tagging_list_str};")
-        
-        # TODO add tagging stuff
+        for tag_id in data["tag_ids"]:
+            image_tagging_list_str = f"{data['id']},{tag_id}"
+            self.cur.execute(f"INSERT INTO image_taggings VALUES ({image_tagging_list_str}) ON CONFLICT DO NOTHING;")
+
+        # print(data.keys())
+        if "tag_info" not in data.keys():
+            "Means tags were not queried; only inserts name and id"
+            for i, tag_id in enumerate(data["tag_ids"]):
+                # create seperate value list with just name and id
+                # print(value_str)
+                self.cur.execute(
+                    f"""
+                    INSERT INTO tags 
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (id, name)
+                    DO NOTHING;
+                    """,
+                    (tag_id, None, data['tags'][i], None, None, None, None)
+                )
+            
+        else:
+            cols = [col[0] for col in self.table_info["tags"]]
+            cols = [x.replace("image_count", "images") for x in cols] # alas...
+
+            for info_dict in data["tag_info"]:
+                info = tuple(info_dict[col] for col in cols)
+                # print(info)
+                if overwrite:
+                    print("ADDING ADDING")
+                    self.cur.execute(
+                        f"""
+                        INSERT INTO tags 
+                            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (id, name)
+                        DO UPDATE SET
+                            image_count = EXCLUDED.image_count,
+                            category = EXCLUDED.category,
+                            slug = EXCLUDED.slug,
+                            description = EXCLUDED.description,
+                            short_description = EXCLUDED.short_description;
+                        """, 
+                        info
+
+                    )
+                else:
+                    self.cur.execute(
+                        f"""
+                        INSERT INTO tags 
+                            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (id, name)
+                        DO NOTHING;
+                        """, 
+                        info
+                    )
 
         print(f"Inserted data for image: {data['id']} into DB tables.")
         # finally,
@@ -290,9 +383,10 @@ class pgDerpi():
 
 if __name__ == "__main__":
     # TESTING TESTING
-    # a = pgDerpi()
-    # a.resetTables()
     a = pgDerpi()
+    # a.resetTables()
+    # a = pgDerpi()
     
-    a.updateId()
-    # a.getId(2836500)
+    # a.updateId(overwrite=True)
+    # print(a.quickShowTable("image_taggings"))
+    print(a.getId(2836500))

@@ -423,6 +423,7 @@ class imgDownloader():
     def quarantine(self, no_tags=[], src="", dst="", move_first=True):
         """
         !! PATHS ARE TENTATIVELY RELATIVE WITHIN THE -data folder. !!!
+        lol
 
         Function to basically batch move a bunch of files out of certain directories.
         This was an issue after I realised I'd turned off the explicit filter
