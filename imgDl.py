@@ -29,6 +29,10 @@ def createallfolders(f_path):
     f_path += "\\"
     # print(f_path)
 
+    if r"Code\\Code" in f_path:
+        # botch, not even friggin sure if it works
+        return 
+
     if not os.path.exists(f_path):
         if "\\" not in f_path:
             current_folder = f_path
