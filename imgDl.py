@@ -296,7 +296,7 @@ class imgDownloader():
         ## convertiong to a df if needed
         dl_list_dict = {}
         if type(dl_list).__name__ == "dict":
-            print("INFO: dl_list is a dictionary. Recommended to use Pandas Dataframes.") # TODO lmao I need to log
+            print("INFO: dl_list is a dictionary. Recommended to use Pandas Dataframes.") # TODO less impt | lmao I need to log
 
             dl_list_dict = dict(dl_list_dict) # for purposes.
 

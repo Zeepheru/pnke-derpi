@@ -43,7 +43,7 @@ class derpi():
         self.local_sql = local_sql_db # used for later, whether the local db is even available
         if local_sql_db:
             self.pref_local = prefer_local # only if local postgres is even enabled lol
-            # also currently not used.
+            # TODO also currently not used.
 
             self.db = pgDerpi()
 
@@ -109,12 +109,14 @@ class derpi():
         returns r_json["image"] as a dict
         with some new additions for ease of access
 
-        importantly, the keys:
+        importantly, getImageInfo() gets the keys:
             src, fname, format, tags
         
-        overwrite_local is whether to call the api regardless and overwrite the local entries
+        overwrite_local is whether to call the DERPIBOORU api regardless and overwrite the local entries
+            - kinda misleading variable name ngl
 
-        tag_info allows it to query all the tags, adding a new key tag_info as a list of said tag responses
+        tag_info allows it to query all the tags, adding a new key tag_info as a list of said tag responses 
+        (the information regarding the tags, what DERPI spits out, btw)
         """
 
         try:
@@ -127,13 +129,14 @@ class derpi():
         r_dict = self.db.getId(id)
 
         if r_dict != None and not overwrite_local: # I need this for the console output
+            # image id is found in db
             print(f"Data for image: {id} found in local db.")
             r_dict["src"] = r_dict["source"]
             r_dict["fname"] = str(id) + "." + r_dict["format"] 
 
             if r_dict["src"] == None:
                 print(f"Image {id} has an invalid source, likely duplicate.")
-                return None
+                return None # TODO less impt | return an error?
             else:
                 return r_dict
         
@@ -152,6 +155,9 @@ class derpi():
                 print("Tag querying. May take even more time.")
                 for tag_name in r_dict["tags"]:
                     r_dict["tag_info"].append(self.tagSearch(tag_name))
+
+            # TODO might wanna just do a test image (and write code in here to test) to export a test json with tag_info
+            # for future reference :)
 
             if self.local_sql:
                 # give the db the r_dict

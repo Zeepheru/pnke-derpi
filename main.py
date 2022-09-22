@@ -1,7 +1,6 @@
 from imgDl import *
 from derpi import *
 
-
 ## these
 global mane6, v, derp
 v = True
@@ -16,6 +15,22 @@ mane6 = [
 derp = derpi(local_sql_db=True, prefer_local=True)
 ####
 
+global introMessage, pnkeDerpiVersion 
+
+pnkeDerpiVersion = "0.1"
+
+introMessage = f"""
+    ____  _   ____ __ ______            ____  __________  ____  ____
+   / __ \/ | / / //_// ____/           / __ \/ ____/ __ \/ __ \/  _/
+  / /_/ /  |/ / ,<  / __/    ______   / / / / __/ / /_/ / /_/ // /  
+ / ____/ /|  / /| |/ /___   /_____/  / /_/ / /___/ _, _/ ____// /   
+/_/   /_/ |_/_/ |_/_____/           /_____/_____/_/ |_/_/   /___/   
+                                                                    
+Fancy ASCII Text Art beacuse...
+Version {pnkeDerpiVersion}
+"""
+
+######################## 
 
 def randomFun():
     
@@ -333,6 +348,9 @@ def csvCloppity(dataset_name="", score = (100, 1000), desired_tags=[], max_image
     The most well-written function for dataset creation, use this as a template
 
     Backup is in the form of a json because I can't be arsed to write conversion code
+
+    TODO JSON OR CSV YA DUM DUM ???!!!!!
+    TODO also write some better explanations in this 
     """
     if dataset_name == "": 
         print("Dataset name is empty. Exiting")
@@ -342,14 +360,14 @@ def csvCloppity(dataset_name="", score = (100, 1000), desired_tags=[], max_image
         return False
 
     ## basic init for stuffffs
-    
     dl = imgDownloader()
 
-    # no pony qury as loading from local csv's for this
+    # no "pony query" as loading from local csv's for this
     csv_files_to_load = [
         "mane6-6000.csv",
         "mane6-3000-v2.csv"
     ]
+    # otherwise the pony query code goes in here
 
     # no dedicated test set yet
     ## creating the ids list 
@@ -459,6 +477,9 @@ def modifyCloppity(dataset_name="", score = (100, 1000), desired_tags=[], max_im
 
 ######
 def main():
+    # main message
+    print(introMessage)
+
     modifyCloppity(
         dataset_name="milk-beta",
         desired_tags=["safe", "suggestive", "questionable", "explicit", "grimdark", "semi-grimdark"],

@@ -15,6 +15,16 @@ structure derived from:
 https://derpibooru.org/pages/data_dumps
 """
 
+# TODO below are notes
+noteToSelfForMMMGS = """
+may have to add more tables for that, or even if you are especially ambitiuos
+just add a new table to this that denotes whether the image is for PNKE or MILK or IC
+I mean, though considering this is the "pnkederpibooru" db, that might not be the best of ideas.
+
+otherwise for MMMGS, if it's going to its own 
+
+"""
+
 class pgDerpi():
     def __init__(self) -> None:
         self.connect()
