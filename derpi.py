@@ -1,4 +1,3 @@
-from matplotlib.font_manager import json_dump
 from numpy import r_
 import requests
 import re
@@ -26,15 +25,22 @@ def dump_json(data):
     return json.dumps(data, indent=4, sort_keys=True)            
 
 class derpi():
-    def __init__(self, local_sql_db=True, prefer_local=True) -> None:
+    def __init__(self, local_sql_db=True, prefer_local=True, debug=True) -> None:
         """
         local_sql_db can be set False for circumstances where the code needs to be run
         without a functioning local postgres database
 
         prefer_local is self-explanatory
+
+        debug is a variable that enables certain print/ghettologging statements, as
+        well as adding certain search limits, etc
         """
+        self.debug = debug
+        self.debug2 = False # graveyard for past debugging statements, to keep them around.
         self.s = requests.Session()
-        print("Session Created.")
+
+        if debug:
+            print("Requests Session Created.")
 
         ## vars
         self.base_url = "https://derpibooru.org"
@@ -154,7 +160,7 @@ class derpi():
                 r_dict["tag_info"] = []
                 print("Tag querying. May take even more time.")
                 for tag_name in r_dict["tags"]:
-                    r_dict["tag_info"].append(self.tagSearch(tag_name))
+                    r_dict["tag_info"].append(self.getTag(tag_name))
 
             # TODO might wanna just do a test image (and write code in here to test) to export a test json with tag_info
             # for future reference :)
@@ -171,7 +177,6 @@ class derpi():
                 print(f"Image {id} has the wrong json keys - likely means the image id is valid but not available, eg duplicates")
                 # Generally, if r is none the other places should not take the image
                 return None
-
 
     def imageSearchTagsDeprec(self, q="safe", sf="first_seen_at", sd="desc", 
         n_get=50, per_page=50,
@@ -264,6 +269,7 @@ class derpi():
             per_page = int(n_get)
 
         for pg in range(n_iter + 1):
+            # TODO check if there's a total in the first response.
             url = self.combineApiUrl(
                 api_path, 
                 q_params={
@@ -295,13 +301,73 @@ class derpi():
 
         return list_of_images
 
-    def tagSearch(self, tag_q):
+    def tagsSearch(self, q="*", n_get=0):
         """
-        Searches tag string.
+        Searches for the TAGS based on a query, returning a list of tag responses.
+        NOT getting a tag, that is [now renamed to getTag() ]
+
+        q - search query, currently manual with no real intention to integrate createDerpiSearchQuery()
+            default is '*' (wildcard)
+
+        filters don't apply for tags iirc.
+        It is by default sorted by image count, in descending order.
+
+        n_get is the desired number of tags, 0 being unlimited.
+
+        """
+
+        api_path = r'/api/v1/json/search/tags'
+        list_of_tags = []
+
+        if self.debug2:
+            q = "*eyes*" # 1190 results
+
+        total = 25 # baseline
+        pg = 0
+        expectedPages = 1
+
+        if n_get == 0:
+            n_get = 2**30 # effectively unlimited???
+
+        while len(list_of_tags) < total:
+            pg += 1
+
+            url = self.combineApiUrl(
+                api_path, 
+                q_params={
+                    "q":urllib.parse.quote(q),
+                    "page":pg+1,
+                    "per_page":50
+                    }
+            )
+            if self.debug:
+                print("Posting: "+url)
+            else:
+                print(f"Page {pg}/{expectedPages}.")
+
+            r_json = self.get(
+                url=url,
+                printJson=False
+            )
+            if pg == 1:
+                total = min(r_json["total"], n_get)
+                print(f"Total tag count from query: {total}")
+                expectedPages = int(total/50)
+
+            list_of_tags += r_json["tags"]
+            
+
+
+        return list_of_tags[:total]
+
+    def getTag(self, tag_q):
+        """
+        Searches a tag using its string to get a tag object.
+
         No Ids because why I have no idea Derpibooru
         """
         # just a simple replace
-        tag_q = tag_q.replace(":", "-colon-") # for artist:
+        tag_q = str(tag_q).replace(":", "-colon-") # for artist:
 
         api_path = r'/api/v1/json/tags/:tag_id'
         url = self.combineApiUrl(api_path, {"tag_id": urllib.parse.quote(str(tag_q).replace(" ", "+"))})
@@ -382,6 +448,10 @@ def createDerpiSearchQuery(def_query="solo, pony, !animated, !human, !webm, !gif
     Default query is the default, standard query
 
     yes_tags and no_tags are lists of tags to be added.
+
+    This works for tag searches, just note that queries like min_score, etc will not work
+    it is RECOMMENDED for tag searches just to create the entire query (likely single term anyway)
+    manually so as to not fuck things up XD
     """
 
     # buncha regex to make this work properly with badly input strings 

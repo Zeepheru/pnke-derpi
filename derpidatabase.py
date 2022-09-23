@@ -1,4 +1,5 @@
 import psycopg
+from psycopg import sql
 import re
 import json
 from datetime import datetime
@@ -13,6 +14,10 @@ but hey. this ain't important. I'm using defaults anyway
 
 structure derived from:
 https://derpibooru.org/pages/data_dumps
+
+
+fucking problems
+https://www.psycopg.org/psycopg3/docs/basic/from_pg2.html
 """
 
 # TODO below are notes
@@ -29,6 +34,7 @@ class pgDerpi():
     def __init__(self) -> None:
         self.connect()
         self.cur = self.conn.cursor()
+        self.clientcur = psycopg.ClientCursor(self.conn)
         
         # checks and creates tables
         self.tableChecks()
@@ -179,14 +185,16 @@ class pgDerpi():
         for table_name in list(self.table_info):
             self.cur.execute(
                 f"""SELECT EXISTS (SELECT FROM pg_tables 
-                WHERE schemaname = 'public' AND tablename  = '{table_name}');"""
+                WHERE schemaname = 'public' AND tablename = %s);""", [table_name]
             )
             if self.cur.fetchone()[0]: # (bool,)
                 # table exists
                 continue
 
+            # as this checks and creates tables one by one, it can deal with singly deleted tables (for resetting etc)
+
             print(f"creating table: '{table_name}'")
-            create_cmd = f"CREATE TABLE {table_name} (\n"
+            create_cmd = f"CREATE TABLE {table_name} (\n" 
             create_cmd += ',\n'.join(str(a[0]) + ' ' + str(a[1]) for a in self.table_info[table_name])
             if self.table_uniques[table_name] != []:
                 create_cmd += ',\nUNIQUE(' + ', '.join(str(a) for a in self.table_uniques[table_name]) + ")"
@@ -205,10 +213,15 @@ class pgDerpi():
 
     also note that None can mean an empty table
     """
-    def quickShowTable(self, tablename="", rowlimit=20, v=False):
+    def quickShowTable(self, table_name="", rowlimit=20, v=False):
+        """
+        set v=True to print for you ya lazy bugger
+
+        TODO: I think it should be fetchall/many, not fetchone -> returns a single row 
+        """
         # note the \x
         self.cur.execute(
-            f" SELECT * FROM {tablename} LIMIT {rowlimit}" + ";"
+            f"SELECT * FROM {table_name} LIMIT %s;", [rowlimit]
         )
         
         r = self.cur.fetchone()
@@ -216,9 +229,9 @@ class pgDerpi():
             print(r)
         return r
 
-    def quickSelect(self, wide=False, query="*", tablename = "", rowLimit=None, v=False):
+    def quickSelect(self, wide=False, query="*", table_name = "", rowLimit=None, v=False):
         # lmao
-        command = f"SELECT {query} FROM {tablename}"
+        command = f"SELECT {query} FROM {table_name}"
         if rowLimit != None:
             command += f" LIMIT = {rowLimit}" 
         if wide:
@@ -232,6 +245,46 @@ class pgDerpi():
             print(r)
         return r
 
+    def deleteRow(self, col, value=None, table_name = "", askForConfirmation=True):
+        """
+        Deletes from table (table_name) all rows that match the condition
+        col = value
+
+        askForConfirmation=True -> user has to cnfirm; default is True
+
+        TODO TODO conditions need to be better written (its own function.)
+        """    
+
+        if not col:
+            print("no condition.")
+            return False
+
+        if askForConfirmation:
+            print(f"Delete rows from table:{table_name} where {col}={value}?")
+            while True:
+                answer = input("Confirmation required (y/n): ")
+                if answer == "y":
+                    break
+                elif answer == "n":
+                    print("Operation cancelled.")
+                    return False
+                else:
+                    continue
+            
+        self.cur.execute(
+            f"DELETE FROM {table_name} WHERE {col} = %s;", [value]
+        ) # execute but you get the result.
+        
+        self.conn.commit()
+        msg = self.cur.statusmessage
+        if not msg:
+            print("No rows deleted.")
+            return False
+        else:
+            fuckfuckfuckfuckfuckfuck = msg.replace('DELETE ', '')
+            print(f"{fuckfuckfuckfuckfuckfuck} rows deleted.")
+            return True
+        
     ###
     def getId(self, img_id=0):
         """
@@ -246,7 +299,7 @@ class pgDerpi():
 
         ## images
         self.cur.execute(
-            f'\nSELECT * FROM images WHERE id = {img_id};'
+            'SELECT * FROM images WHERE id = %s;', [img_id]
             )
         r = self.cur.fetchone()
         if r == None:
@@ -263,7 +316,7 @@ class pgDerpi():
 
         # image tags (ids)
         self.cur.execute(
-            f'\nSELECT tag_id FROM image_taggings WHERE image_id = {img_id};'
+            'SELECT tag_id FROM image_taggings WHERE image_id = %s;', [img_id]
             )
         r = self.cur.fetchall()
         return_data["tag_ids"] = [a[0] for a in r]
@@ -271,7 +324,7 @@ class pgDerpi():
         # tag names
         id_list_postgres = "(" + str(return_data["tag_ids"])[1:-1] + ")"
         self.cur.execute(
-            f'\nSELECT name FROM tags WHERE id IN {id_list_postgres};'
+            'SELECT name FROM tags WHERE id IN %(id_list)s;', {'id_list':id_list_postgres}
             )
         r = self.cur.fetchall()
         return_data["tags"] = [a[0] for a in r]
@@ -279,6 +332,52 @@ class pgDerpi():
         # print(return_data)
 
         return return_data
+
+    def updateTags(self, tag_info, overwrite=True, commit=False):
+        """
+        Updates the table "tags" with a tag_info dict, or a tag_response object.
+
+        overwrite is self-explanatory
+        commit is whether to commit (self.conn.commit() )
+        """
+        ## minor editing for reasons. "escapes" the newlines
+        tag_info["description"] = tag_info["description"]
+
+        # cols      
+        cols = [col[0] for col in self.table_info["tags"]]
+        cols = [x.replace("image_count", "images") for x in cols] # alas...
+
+        info = tuple(tag_info[col] for col in cols)
+
+        if overwrite:
+        
+            self.cur.execute(
+                """
+                INSERT INTO tags 
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (id, name)
+                DO UPDATE SET
+                    image_count = EXCLUDED.image_count,
+                    category = EXCLUDED.category,
+                    slug = EXCLUDED.slug,
+                    description = EXCLUDED.description,
+                    short_description = EXCLUDED.short_description;
+                """, 
+                info
+            )
+        else:
+            self.cur.execute(
+                """
+                INSERT INTO tags 
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (id, name)
+                DO NOTHING;
+                """, 
+                info
+            )
+        if commit:
+            self.conn.commit()
+        return True
 
     def updateId(self, data={}, overwrite=False):
         """
@@ -295,6 +394,7 @@ class pgDerpi():
         # data = json.load(open('test-image-format.json'))["image"]
         ##################
 
+        "the cols things is basically getting the columns of the local database for uses"
         cols = [col[0] for col in self.table_info["images"]]
         
         ## fixing some DERPIBOORU INCONSISTENCIES 
@@ -349,39 +449,9 @@ class pgDerpi():
                 )
             
         else:
-            cols = [col[0] for col in self.table_info["tags"]]
-            cols = [x.replace("image_count", "images") for x in cols] # alas...
-
             for info_dict in data["tag_info"]:
-                info = tuple(info_dict[col] for col in cols)
-                # print(info)
-                if overwrite:
-                    print("ADDING ADDING")
-                    self.cur.execute(
-                        f"""
-                        INSERT INTO tags 
-                            VALUES (%s, %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (id, name)
-                        DO UPDATE SET
-                            image_count = EXCLUDED.image_count,
-                            category = EXCLUDED.category,
-                            slug = EXCLUDED.slug,
-                            description = EXCLUDED.description,
-                            short_description = EXCLUDED.short_description;
-                        """, 
-                        info
-
-                    )
-                else:
-                    self.cur.execute(
-                        f"""
-                        INSERT INTO tags 
-                            VALUES (%s, %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (id, name)
-                        DO NOTHING;
-                        """, 
-                        info
-                    )
+                self.updateTags(tag_info=info_dict, overwrite=True, commit=False)
+                
 
         print(f"Inserted data for image: {data['id']} into DB tables.")
         # finally,

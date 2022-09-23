@@ -2,7 +2,8 @@ from imgDl import *
 from derpi import *
 
 ## these
-global mane6, v, derp
+global mane6, v, derp, debugMode
+debugMode = True
 v = True
 mane6 = [
         "twilight sparkle",
@@ -12,12 +13,12 @@ mane6 = [
         "pinkie pie", 
         "rarity"
     ] # /)
-derp = derpi(local_sql_db=True, prefer_local=True)
+
 ####
 
 global introMessage, pnkeDerpiVersion 
 
-pnkeDerpiVersion = "0.1"
+pnkeDerpiVersion = "0.2.0"
 
 introMessage = f"""
     ____  _   ____ __ ______            ____  __________  ____  ____
@@ -476,9 +477,13 @@ def modifyCloppity(dataset_name="", score = (100, 1000), desired_tags=[], max_im
     ) 
 
 ######
-def main():
-    # main message
-    print(introMessage)
+def mainOne():
+    a = derp.tagsSearch(q="*", n_get = 0)
+    
+    # print(len(a))
+
+    "To keep the functions and all the arguments without running time for peak laziness:"
+    return "No :D"
 
     modifyCloppity(
         dataset_name="milk-beta",
@@ -488,13 +493,38 @@ def main():
         load_backup=False
     )
 
-def me_tired():
-    getSpecificNumber()
-
 def lull():
+    """
+    Something something move images...
+
+    """
     dl = imgDownloader()
     dl.quarantine(src="derpi-imgs", dst="derpi-imgs-nsfw", no_tags=["explicit"], move_first=True)
     # it works, just remember to remove the break
 
+#### DONT TOUCHY TOUCH
+def main():
+    global derp
+    """
+    Actual main function that runs the actual desired other functions. Sets up Derpi and the intro message.
+    """
+    if debugMode:
+        introMessage = f"""
+PNKE-Derpibooru V {pnkeDerpiVersion} 
+  ___  ___ ___ _   _  ___   __  __  ___  ___  ___ 
+ |   \| __| _ ) | | |/ __| |  \/  |/ _ \|   \| __|
+ | |) | _|| _ \ |_| | (_ | | |\/| | (_) | |) | _| 
+ |___/|___|___/\___/ \___| |_|  |_|\___/|___/|___| , aka print() mode.
+                                                  
+Remember to set debugMode to False if this is not desired.
+        """
+        
+    print(introMessage)
+    derp = derpi(local_sql_db=True, prefer_local=True, debug=debugMode) 
+    ###
+    # << functions are below >>
+    mainOne()
+
 if __name__ == '__main__':
-    lull()
+
+    main()
